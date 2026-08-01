@@ -1,23 +1,14 @@
 import 'package:ferrematica_express/features/orders/data/providers.dart';
 import 'package:ferrematica_express/main.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 
 import 'features/orders/presentation/fake_orders_repository.dart';
 import 'helpers/pump_app.dart';
 
 void main() {
-  testWidgets('app boots to the splash screen without crashing', (
+  testWidgets('app boots and redirects to the orders list without crashing', (
     tester,
   ) async {
-    await pumpApp(tester, const FerrematicaApp());
-    await tester.pump();
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-  });
-
-  testWidgets('go_router navigates to the orders list route', (tester) async {
     // Overrides the repository with an in-memory fake so this boot-smoke
     // test never depends on Isar's native watch-stream callback, which
     // (like Isar's open/close calls — see pump_app.dart) doesn't resolve
@@ -31,10 +22,6 @@ void main() {
       const FerrematicaApp(),
       overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
     );
-    await tester.pump();
-
-    final context = tester.element(find.byType(CircularProgressIndicator));
-    GoRouter.of(context).go('/orders');
     await tester.pumpAndSettle();
 
     expect(find.text('Pedidos'), findsOneWidget);

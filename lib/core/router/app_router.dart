@@ -14,9 +14,10 @@ import '../../features/orders/presentation/screens/orders_list_screen.dart';
 final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
-    // Reserved for a future auth/role guard (SDD §4). Empty for now: no
-    // redirect logic exists until a real auth provider is wired.
-    redirect: (context, state) => null,
+    // TODO(auth): replace with a real auth/role guard (SDD §4) once login
+    // exists. For now `/` only exists as a redirect landing spot to `/orders`.
+    redirect: (context, state) =>
+        state.matchedLocation == '/' ? '/orders' : null,
     routes: [
       GoRoute(
         path: '/',
