@@ -1,48 +1,52 @@
 # Ferrematica Express
 
-Flutter scaffold for Ferrematica's delivery app (see `SDD.md`).
+Scaffold Flutter para la app de delivery de Ferrematica (ver `SDD.md`).
 
-## Setup
+## Configuración inicial
 
 1. `flutter pub get`
-2. Copy `dart_define.example.json` to `dart_define.json` (gitignored) and fill
-   in real `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `GOOGLE_MAPS_API_KEY` values.
-3. Run with secrets injected:
+2. Copiar `dart_define.example.json` a `dart_define.json` (ignorado por git) y
+   completar los valores reales de `SUPABASE_URL` / `SUPABASE_ANON_KEY` /
+   `GOOGLE_MAPS_API_KEY`.
+3. Ejecutar con los secrets inyectados:
    `flutter run --dart-define-from-file=dart_define.json`
 
-### Google Maps native configuration
+### Configuración nativa de Google Maps
 
-Native Maps config (Android/iOS) reads the API key from **gitignored,
-machine-local files**, not from `dart_define.json` (the native SDKs can't
-read Dart's `--dart-define` values):
+La configuración nativa de Maps (Android/iOS) lee la API key desde
+**archivos locales de la máquina, ignorados por git**, no desde
+`dart_define.json` (los SDKs nativos no pueden leer los valores
+`--dart-define` de Dart):
 
 - Android: `android/local.properties` → `MAPS_API_KEY=...`
-- iOS: copy `ios/Runner/Config/Secrets.example.xcconfig` to
-  `ios/Runner/Config/Secrets.xcconfig` and fill in `GOOGLE_MAPS_API_KEY`.
+- iOS: copiar `ios/Runner/Config/Secrets.example.xcconfig` a
+  `ios/Runner/Config/Secrets.xcconfig` y completar `GOOGLE_MAPS_API_KEY`.
 
-Both files ship with a placeholder value so the app builds without a real
-key (Maps requests will simply fail at runtime until a real key is set).
+Ambos archivos vienen con un valor placeholder para que la app compile sin
+una key real (los pedidos a Maps simplemente van a fallar en runtime hasta
+que se configure una key real).
 
-**MANUAL STEP — cannot be automated by sdd-apply:** before shipping, the
-real Google Maps API key MUST be restricted in the
+**PASO MANUAL — no se puede automatizar con sdd-apply:** antes de publicar
+la app, la API key real de Google Maps DEBE restringirse en la
 [Google Cloud Console](https://console.cloud.google.com/):
 
-- Android: restrict by the app's SHA-1 signing certificate fingerprint +
-  package name `com.ferrematica.express`.
-- iOS: restrict by Bundle ID `com.ferrematica.express`.
+- Android: restringir por el fingerprint SHA-1 del certificado de firma de
+  la app + el nombre de paquete `com.ferrematica.express`.
+- iOS: restringir por el Bundle ID `com.ferrematica.express`.
 
-An unrestricted key embedded in a shipped binary is not secret — it can be
-extracted from the APK/IPA. The restriction is what actually protects it.
+Una key sin restricciones embebida en un binario publicado no es secreta —
+se puede extraer del APK/IPA. La restricción es lo que realmente la
+protege.
 
-## Getting Started
+## Primeros pasos
 
-This project is a starting point for a Flutter application.
+Este proyecto es el punto de partida de una aplicación Flutter.
 
-A few resources to get you started if this is your first Flutter project:
+Algunos recursos útiles si es tu primer proyecto Flutter:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- [Lab: escribí tu primera app Flutter](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: ejemplos útiles de Flutter](https://docs.flutter.dev/cookbook)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Para más ayuda con el desarrollo en Flutter, mirá la
+[documentación oficial](https://docs.flutter.dev/), que ofrece tutoriales,
+ejemplos, guías de desarrollo mobile y la referencia completa de la API.
