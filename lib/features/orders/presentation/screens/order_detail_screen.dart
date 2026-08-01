@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../domain/order.dart';
 import '../providers.dart';
 import '../widgets/incomplete_badge.dart';
-import '../widgets/order_card.dart' show orderStatusLabel;
+import '../widgets/order_card.dart'
+    show orderStatusColor, orderStatusIcon, orderStatusLabel;
 import '../widgets/payment_pending_banner.dart';
 import '../widgets/sync_status_chip.dart';
 
@@ -51,6 +52,7 @@ class _OrderDetailBody extends ConsumerWidget {
       OrderStatus.entregado,
     );
     final canCancel = order.status != OrderStatus.cancelado;
+    final statusColor = orderStatusColor(order.status);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -65,7 +67,19 @@ class _OrderDetailBody extends ConsumerWidget {
         Wrap(
           spacing: 8,
           children: [
-            Chip(label: Text(orderStatusLabel(order.status))),
+            Chip(
+              avatar: Icon(
+                orderStatusIcon(order.status),
+                size: 18,
+                color: statusColor,
+              ),
+              label: Text(orderStatusLabel(order.status)),
+              backgroundColor: statusColor.withValues(alpha: 0.12),
+              labelStyle: TextStyle(
+                color: statusColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             if (order.isIncomplete) const IncompleteBadge(),
             SyncStatusChip(status: order.syncStatus),
           ],
