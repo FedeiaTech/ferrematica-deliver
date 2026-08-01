@@ -16,9 +16,10 @@ void main() {
       isar = await openTestIsar();
 
       expect(isar.isOpen, isTrue);
-      // OrderModelSchema is currently the only registered collection —
-      // update this count as more feature schemas are added.
-      expect(isarSchemas, hasLength(1));
+      // OrderModelSchema + SyncCursorModelSchema are currently the only
+      // registered collections — update this count as more feature schemas
+      // are added.
+      expect(isarSchemas, hasLength(2));
     });
   });
 }
