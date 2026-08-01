@@ -1,22 +1,11 @@
 import 'package:isar_community/isar.dart';
 
-part 'isar_module.g.dart';
+import '../../features/orders/data/order_model.dart';
 
-/// Bootstrap-only placeholder collection. `isar_community` requires at
-/// least one collection to open an instance — this placeholder exists
-/// purely to satisfy that constraint until the first real feature adds its
-/// own `@collection`. It is never queried by app code and should be removed
-/// once a real collection exists.
-@collection
-class BootstrapPlaceholder {
-  Id id = Isar.autoIncrement;
-}
-
-/// Isar collection schemas registered by this app. Currently only
-/// [BootstrapPlaceholderSchema] (see above) — features append their own
-/// schema here as they're implemented.
+/// Isar collection schemas registered by this app. Features append their
+/// own schema here as they're implemented.
 const List<CollectionSchema<dynamic>> isarSchemas = <CollectionSchema<dynamic>>[
-  BootstrapPlaceholderSchema,
+  OrderModelSchema,
 ];
 
 /// Opens the app's single Isar instance backed by [isarSchemas] at

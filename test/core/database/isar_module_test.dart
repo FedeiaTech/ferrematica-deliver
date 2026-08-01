@@ -12,12 +12,12 @@ void main() {
       await closeTestIsar(isar);
     });
 
-    test('opens successfully with no real feature collections registered', () async {
+    test('opens successfully with registered feature collections', () async {
       isar = await openTestIsar();
 
       expect(isar.isOpen, isTrue);
-      // Only the bootstrap placeholder is registered — no real feature
-      // collection exists yet (see isar_module.dart doc comment).
+      // OrderModelSchema is currently the only registered collection —
+      // update this count as more feature schemas are added.
       expect(isarSchemas, hasLength(1));
     });
   });
