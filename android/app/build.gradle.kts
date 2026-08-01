@@ -5,6 +5,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Google Maps API key, resolved from `android/local.properties` (gitignored,
+// machine-local — never committed). Falls back to an empty placeholder so a
+// missing key fails at Maps runtime, not at build time. The SHA-1 restriction
+// for the *real* key is a MANUAL step in Google Cloud Console — see
+// `dart_define.example.json` for details.
+val localProperties = java.util.Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
+
 android {
     namespace = "com.ferrematica.express"
     compileSdk = flutter.compileSdkVersion
@@ -24,10 +36,12 @@ android {
         applicationId = "com.ferrematica.express"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // minSdk 21 required by google_maps_flutter.
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {
