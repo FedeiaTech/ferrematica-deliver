@@ -47,3 +47,10 @@ app.*.map.json
 # Secrets (Ferrematica: dart-define based config, never commit real values)
 dart_define.json
 ios/Runner/Config/Secrets.xcconfig
+
+# Isar native core binary, auto-downloaded by test/helpers/test_isar.dart
+# via Isar.initializeIsarCore(download: true) — platform-specific, not
+# source, never commit.
+/libisar.dll
+/libisar.so
+/libisar.dylib
