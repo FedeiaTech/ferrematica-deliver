@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Secrets (Ferrematica: dart-define based config, never commit real values)
+dart_define.json
+ios/Runner/Config/Secrets.xcconfig
