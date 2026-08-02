@@ -2,15 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:uuid/uuid.dart';
 
+import '../../auth/presentation/providers.dart';
 import '../data/providers.dart';
 import '../domain/order.dart';
 import '../domain/orders_repository.dart';
-
-/// Temporary stand-in for the authenticated dueño's user id. There is no
-/// auth UI in this slice (design's open question "dev-session stub"), so
-/// every order created from the app is attributed to this constant until a
-/// real session provider exists. Flag for removal once auth lands.
-const String devOwnerId = 'dev-owner-stub';
 
 /// Forward-only lifecycle order used to reject backward status transitions.
 /// `cancelado` is reachable from any of these and is terminal (no further
@@ -78,6 +73,13 @@ class OrdersController extends Notifier<AsyncValue<void>> {
 
   /// Creates a new order. Only [deliveryAddress] is required — every other
   /// field is optional, matching the domain's only invariant.
+  ///
+  /// `createdBy` is the authenticated user's id from [sessionProvider]
+  /// (design decision #4) — throws [StateError] if there is no session,
+  /// since an unauthenticated create would violate the
+  /// `orders.created_by → profiles.id` FK against a real project. The
+  /// router guard should make this unreachable in practice (order screens
+  /// only render for an authenticated dueño).
   Future<void> createOrder({
     required String deliveryAddress,
     String? clientName,
@@ -87,11 +89,15 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     PaymentMethod paymentMethod = PaymentMethod.sinDefinir,
     List<OrderItem> items = const <OrderItem>[],
   }) async {
+    final session = ref.read(sessionProvider).value;
+    if (session == null) {
+      throw StateError('createOrder requires an authenticated session');
+    }
     final now = DateTime.now();
     final order = Order(
       id: const Uuid().v4(),
       deliveryAddress: deliveryAddress,
-      createdBy: devOwnerId,
+      createdBy: session.userId,
       createdAt: now,
       updatedAt: now,
       clientName: clientName,

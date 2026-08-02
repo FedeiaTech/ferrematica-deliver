@@ -38,6 +38,30 @@ Una key sin restricciones embebida en un binario publicado no es secreta —
 se puede extraer del APK/IPA. La restricción es lo que realmente la
 protege.
 
+## Autenticación — alta de cuentas (dueño y cadete)
+
+La app usa Supabase Auth (email/password) para ambos roles. **No hay
+alta propia (self-registration)**: tanto la cuenta del dueño como las de
+cada cadete se crean manualmente desde el Supabase Dashboard, nunca desde
+un flujo cliente. Esto es intencional (ver `sdd/navegacion-cadete/design`,
+decisión #5): la Service Role Key habilita un bypass total de la base y
+**nunca debe viajar en un binario Flutter** (es extraíble de un APK/IPA).
+Una Edge Function es la respuesta correcta a largo plazo, pero no hay
+proyecto Supabase real todavía y agregarla ahora es scope innecesario para
+esta etapa.
+
+**Runbook manual (dueño y cadete, mismo procedimiento):**
+
+1. Supabase Dashboard → **Authentication → Users → Add user** → cargar
+   email + contraseña. Copiar el UUID generado.
+2. Supabase Dashboard → **SQL Editor**, ejecutar:
+   ```sql
+   insert into public.profiles (id, rol, full_name)
+   values ('<uuid-copiado>', 'dueno', 'Nombre y Apellido');
+   -- o rol = 'cadete' para un repartidor
+   ```
+3. La cuenta ya puede iniciar sesión desde la pantalla de login de la app.
+
 ## Primeros pasos
 
 Este proyecto es el punto de partida de una aplicación Flutter.
