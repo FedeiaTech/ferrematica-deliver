@@ -18,10 +18,24 @@ import '../widgets/sync_status_chip.dart';
 /// spec's "Delivered with pending payment" scenario), and "Asignar cadete"
 /// (opens `assign_cadete_sheet.dart`, restricted to `pendiente`/`asignado`
 /// orders per spec's order-assignment requirement).
+///
+/// [readOnlyForCadete] (design decision #8 — reuse this screen for the
+/// cadete-facing detail view instead of forking it) hides every dueño-only
+/// action: "Editar", "Asignar cadete"/"Reasignar cadete", "Cancelar
+/// pedido", and "Eliminar". "Marcar entregado" stays visible even in
+/// cadete mode — per spec's `cadete-orders`/`order-management` domains the
+/// assigned cadete is the one who closes out `en_camino → entregado`
+/// through this same flow. Starting `asignado → en_camino` is a separate
+/// action added in PR6 (navigation screen), out of this PR's scope.
 class OrderDetailScreen extends ConsumerWidget {
-  const OrderDetailScreen({required this.orderId, super.key});
+  const OrderDetailScreen({
+    required this.orderId,
+    this.readOnlyForCadete = false,
+    super.key,
+  });
 
   final String orderId;
+  final bool readOnlyForCadete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,7 +48,10 @@ class OrderDetailScreen extends ConsumerWidget {
           if (order == null) {
             return const Center(child: Text('Pedido no encontrado.'));
           }
-          return _OrderDetailBody(order: order);
+          return _OrderDetailBody(
+            order: order,
+            readOnlyForCadete: readOnlyForCadete,
+          );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) =>
@@ -45,9 +62,10 @@ class OrderDetailScreen extends ConsumerWidget {
 }
 
 class _OrderDetailBody extends ConsumerWidget {
-  const _OrderDetailBody({required this.order});
+  const _OrderDetailBody({required this.order, required this.readOnlyForCadete});
 
   final Order order;
+  final bool readOnlyForCadete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,12 +73,14 @@ class _OrderDetailBody extends ConsumerWidget {
       order.status,
       OrderStatus.entregado,
     );
-    final canCancel = order.status != OrderStatus.cancelado;
+    final canCancel = !readOnlyForCadete && order.status != OrderStatus.cancelado;
     // Spec's order-assignment requirement: assignable only while
     // pendiente/asignado — once en_camino or later, reassignment is
     // rejected (matches OrdersController.assignCadete's own guard).
+    // Dueño-only action — never shown in cadete mode.
     final canAssignCadete =
-        order.status == OrderStatus.pendiente || order.status == OrderStatus.asignado;
+        !readOnlyForCadete &&
+        (order.status == OrderStatus.pendiente || order.status == OrderStatus.asignado);
     final statusColor = orderStatusColor(order.status);
 
     return ListView(
@@ -118,11 +138,12 @@ class _OrderDetailBody extends ConsumerWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            OutlinedButton.icon(
-              onPressed: () => context.push('/orders/${order.id}/edit'),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Editar'),
-            ),
+            if (!readOnlyForCadete)
+              OutlinedButton.icon(
+                onPressed: () => context.push('/orders/${order.id}/edit'),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar'),
+              ),
             if (canDeliver)
               FilledButton.icon(
                 onPressed: () => _openMarkDeliveredSheet(context, ref, order),
@@ -143,17 +164,18 @@ class _OrderDetailBody extends ConsumerWidget {
                 icon: const Icon(Icons.cancel_outlined),
                 label: const Text('Cancelar pedido'),
               ),
-            TextButton.icon(
-              onPressed: () => _confirmDelete(context, ref, order),
-              icon: Icon(
-                Icons.delete_outline,
-                color: Theme.of(context).colorScheme.error,
+            if (!readOnlyForCadete)
+              TextButton.icon(
+                onPressed: () => _confirmDelete(context, ref, order),
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                label: Text(
+                  'Eliminar',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
-              label: Text(
-                'Eliminar',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
           ],
         ),
       ],

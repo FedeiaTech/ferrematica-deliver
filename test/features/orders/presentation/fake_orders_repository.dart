@@ -13,6 +13,7 @@ Order buildTestOrder({
   double? amountToCharge,
   SyncStatus syncStatus = SyncStatus.pending,
   DateTime? updatedAt,
+  String? assignedCadeteId,
 }) {
   final at = updatedAt ?? DateTime(2026, 1, 1);
   return Order(
@@ -26,6 +27,7 @@ Order buildTestOrder({
     paymentMethod: paymentMethod,
     amountToCharge: amountToCharge,
     syncStatus: syncStatus,
+    assignedCadeteId: assignedCadeteId,
   );
 }
 
