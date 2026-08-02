@@ -129,6 +129,37 @@ void main() {
     });
   });
 
+  group('OrderStatus enum declaration order (Isar ordinal regression)', () {
+    // Isar's `@enumerated` field on `OrderModel.status` defaults to
+    // `EnumType.ordinal`, which persists `OrderStatus.values.indexOf(status)`
+    // — the enum's *declaration* index, not its name. `enCamino` was
+    // deliberately appended at the END of the `OrderStatus` declaration
+    // (navegacion-cadete design decision #6) specifically so this index
+    // stays fixed for every status that predates it. If a future change
+    // ever moves `enCamino` (or any status) to a different declaration
+    // position, this test fails loudly instead of silently corrupting the
+    // status of every existing local Isar row on the next read.
+    test('pendiente keeps ordinal 0', () {
+      expect(OrderStatus.values.indexOf(OrderStatus.pendiente), 0);
+    });
+
+    test('asignado keeps ordinal 1', () {
+      expect(OrderStatus.values.indexOf(OrderStatus.asignado), 1);
+    });
+
+    test('entregado keeps ordinal 2 (unshifted by enCamino)', () {
+      expect(OrderStatus.values.indexOf(OrderStatus.entregado), 2);
+    });
+
+    test('cancelado keeps ordinal 3 (unshifted by enCamino)', () {
+      expect(OrderStatus.values.indexOf(OrderStatus.cancelado), 3);
+    });
+
+    test('enCamino was appended at ordinal 4, not inserted mid-enum', () {
+      expect(OrderStatus.values.indexOf(OrderStatus.enCamino), 4);
+    });
+  });
+
   group('PaymentMethod enum round-trip', () {
     test('name maps back to the same enum value', () {
       for (final method in PaymentMethod.values) {

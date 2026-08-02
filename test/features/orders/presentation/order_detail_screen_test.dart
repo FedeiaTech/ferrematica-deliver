@@ -11,8 +11,11 @@ void main() {
   testWidgets(
     'marking delivered with pending payment completes without blocking and shows the alert',
     (tester) async {
+      // Seeded at enCamino, not asignado: per navegacion-cadete's tightened
+      // lifecycle (PR2), entregado is now only reachable from enCamino —
+      // asignado -> entregado directly would skip a step and be rejected.
       final repository = FakeOrdersRepository(
-        seed: [buildTestOrder(id: 'order-1', status: OrderStatus.asignado)],
+        seed: [buildTestOrder(id: 'order-1', status: OrderStatus.enCamino)],
       );
       addTearDown(repository.dispose);
 

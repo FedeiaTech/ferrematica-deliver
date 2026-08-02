@@ -400,12 +400,14 @@ const _OrderModelstatusEnumValueMap = {
   'asignado': 1,
   'entregado': 2,
   'cancelado': 3,
+  'enCamino': 4,
 };
 const _OrderModelstatusValueEnumMap = {
   0: OrderStatus.pendiente,
   1: OrderStatus.asignado,
   2: OrderStatus.entregado,
   3: OrderStatus.cancelado,
+  4: OrderStatus.enCamino,
 };
 const _OrderModelsyncStatusEnumValueMap = {
   'pending': 0,

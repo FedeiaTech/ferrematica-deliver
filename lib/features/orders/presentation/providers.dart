@@ -10,9 +10,17 @@ import '../domain/orders_repository.dart';
 /// Forward-only lifecycle order used to reject backward status transitions.
 /// `cancelado` is reachable from any of these and is terminal (no further
 /// transitions once cancelled) — see spec's "Status lifecycle" requirement.
+///
+/// `enCamino` is inserted here at its *logical* lifecycle position (between
+/// `asignado` and `entregado`), even though it is declared at the END of
+/// the `OrderStatus` enum itself. [isValidTransition] indexes this list by
+/// position, not the enum's ordinal, so this mid-list insertion is safe and
+/// does not touch Isar's on-disk `@enumerated` ordinal storage — see design
+/// decision #6 and the comment on `OrderStatus` in `order.dart`.
 const List<OrderStatus> _forwardLifecycle = <OrderStatus>[
   OrderStatus.pendiente,
   OrderStatus.asignado,
+  OrderStatus.enCamino,
   OrderStatus.entregado,
 ];
 
@@ -152,17 +160,58 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     );
   }
 
-  /// True when moving from [from] to [to] does not skip backward in the
-  /// forward-only lifecycle `pendiente` → `asignado` → `entregado`.
-  /// `cancelado` is reachable from any non-terminal status; nothing is
-  /// reachable from `cancelado`.
+  /// Assigns [cadeteId] to [order]. Restricted to `pendiente`/`asignado`
+  /// orders per spec's order-assignment requirement — reassignment after
+  /// `en_camino` must be rejected. The dueño-facing UI that calls this
+  /// (`assign_cadete_sheet.dart`) lands in PR3; this method only needs to
+  /// exist and enforce the invariant so PR3 can wire it without touching
+  /// this file again.
+  Future<void> assignCadete(Order order, String cadeteId) async {
+    if (order.status != OrderStatus.pendiente &&
+        order.status != OrderStatus.asignado) {
+      return;
+    }
+    await _repository.save(
+      order.copyWith(
+        assignedCadeteId: cadeteId,
+        status: OrderStatus.asignado,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
+  /// Transitions [order] from `asignado` to `en_camino`. Per spec, only the
+  /// assigned cadete triggers this (by starting navigation) — the
+  /// navigation screen that calls this lands in PR6; this method only
+  /// needs to exist and enforce the transition invariant now.
+  Future<void> startDelivery(Order order) async {
+    if (!isValidTransition(order.status, OrderStatus.enCamino)) return;
+    await _repository.save(
+      order.copyWith(status: OrderStatus.enCamino, syncStatus: SyncStatus.pending),
+    );
+  }
+
+  /// True when moving from [from] to [to] is a single forward step in the
+  /// lifecycle `pendiente` → `asignado` → `en_camino` → `entregado` — per
+  /// spec's "Transitions MUST NOT skip backward or skip forward steps".
+  /// `cancelado` is reachable from any non-terminal status in one step;
+  /// nothing is reachable from `cancelado`.
+  ///
+  /// **PR2 fix**: previously this only checked `toIndex > fromIndex`
+  /// (monotonic-forward), which incorrectly allowed skipping a step (e.g.
+  /// `pendiente` straight to `entregado`) — a latent violation of the same
+  /// "MUST NOT skip forward steps" spec line that predates `en_camino`.
+  /// Tightened to adjacency (`toIndex == fromIndex + 1`) while adding
+  /// `en_camino` to the lifecycle, since both changes touch this exact
+  /// function and no existing test relied on the skip-forward gap. Flagged
+  /// for sdd-verify as a deviation beyond PR2's literal scope.
   static bool isValidTransition(OrderStatus from, OrderStatus to) {
     if (from == to) return true;
     if (from == OrderStatus.cancelado) return false;
     if (to == OrderStatus.cancelado) return true;
     final fromIndex = _forwardLifecycle.indexOf(from);
     final toIndex = _forwardLifecycle.indexOf(to);
-    return toIndex > fromIndex;
+    return toIndex == fromIndex + 1;
   }
 }
 

@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/order.dart';
@@ -66,7 +67,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'amount_to_charge': order.amountToCharge,
     'payment_method': _paymentMethodToRow(order.paymentMethod),
     'payment_status': _paymentStatusToRow(order.paymentStatus),
-    'status': order.status.name,
+    'status': SupabaseOrdersRemote.statusToRow(order.status),
     'items': order.items
         .map(
           (item) => <String, dynamic>{
@@ -96,7 +97,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     amountToCharge: (row['amount_to_charge'] as num?)?.toDouble(),
     paymentMethod: _paymentMethodFromRow(row['payment_method'] as String),
     paymentStatus: _paymentStatusFromRow(row['payment_status'] as String),
-    status: OrderStatus.values.byName(row['status'] as String),
+    status: SupabaseOrdersRemote.statusFromRow(row['status'] as String),
     items: ((row['items'] as List<dynamic>?) ?? const <dynamic>[])
         .map(
           (dynamic item) => OrderItem(
@@ -112,6 +113,36 @@ class SupabaseOrdersRemote implements OrdersRemote {
         : DateTime.parse(row['delivered_at'] as String),
     deletedAt: row['deleted_at'] == null ? null : DateTime.parse(row['deleted_at'] as String),
   );
+
+  /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/
+  /// [_paymentMethodFromRow]'s style. Required because `OrderStatus.name`
+  /// (Dart) yields `enCamino` for the new status, but the `orders.status`
+  /// SQL check constraint (0003 migration) only accepts the snake_case
+  /// `'en_camino'` — see design decision #7.
+  ///
+  /// Deliberately **not** underscore-private (unlike the payment mappers)
+  /// so it can be unit-tested directly: the design flagged the
+  /// `.name`-vs-wire-format mismatch as the single highest correctness risk
+  /// in this change, so its round-trip gets a real test rather than relying
+  /// on the untested-vendor-surface precedent used elsewhere in this file.
+  @visibleForTesting
+  static String statusToRow(OrderStatus status) => switch (status) {
+    OrderStatus.pendiente => 'pendiente',
+    OrderStatus.asignado => 'asignado',
+    OrderStatus.enCamino => 'en_camino',
+    OrderStatus.entregado => 'entregado',
+    OrderStatus.cancelado => 'cancelado',
+  };
+
+  @visibleForTesting
+  static OrderStatus statusFromRow(String value) => switch (value) {
+    'pendiente' => OrderStatus.pendiente,
+    'asignado' => OrderStatus.asignado,
+    'en_camino' => OrderStatus.enCamino,
+    'entregado' => OrderStatus.entregado,
+    'cancelado' => OrderStatus.cancelado,
+    _ => OrderStatus.pendiente,
+  };
 
   static String _paymentMethodToRow(PaymentMethod method) => switch (method) {
     PaymentMethod.efectivo => 'efectivo',

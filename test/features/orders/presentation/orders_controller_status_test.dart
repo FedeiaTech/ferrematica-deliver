@@ -1,0 +1,135 @@
+import 'package:ferrematica_express/features/orders/data/providers.dart';
+import 'package:ferrematica_express/features/orders/domain/order.dart';
+import 'package:ferrematica_express/features/orders/presentation/providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'fake_orders_repository.dart';
+
+void main() {
+  group('OrdersController.isValidTransition — en_camino', () {
+    test('asignado -> enCamino is accepted', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.asignado, OrderStatus.enCamino),
+        isTrue,
+      );
+    });
+
+    test('enCamino -> entregado is accepted', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.enCamino, OrderStatus.entregado),
+        isTrue,
+      );
+    });
+
+    test('enCamino -> asignado (backward) is rejected', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.enCamino, OrderStatus.asignado),
+        isFalse,
+      );
+    });
+
+    test('pendiente -> enCamino (skips asignado) is rejected', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.pendiente, OrderStatus.enCamino),
+        isFalse,
+      );
+    });
+
+    test('entregado -> enCamino (backward) is rejected', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.entregado, OrderStatus.enCamino),
+        isFalse,
+      );
+    });
+
+    test('any non-cancelado status -> cancelado is still accepted', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.enCamino, OrderStatus.cancelado),
+        isTrue,
+      );
+    });
+
+    test('cancelado -> enCamino is rejected (terminal state)', () {
+      expect(
+        OrdersController.isValidTransition(OrderStatus.cancelado, OrderStatus.enCamino),
+        isFalse,
+      );
+    });
+  });
+
+  group('OrdersController.startDelivery', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('transitions asignado -> enCamino', () async {
+      final order = buildTestOrder(status: OrderStatus.asignado);
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).startDelivery(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.enCamino);
+      expect(saved.syncStatus, SyncStatus.pending);
+    });
+
+    test('is a no-op from pendiente (skips asignado)', () async {
+      final order = buildTestOrder(status: OrderStatus.pendiente);
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).startDelivery(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.pendiente);
+    });
+  });
+
+  group('OrdersController.assignCadete', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('sets assignedCadeteId and status=asignado from pendiente', () async {
+      final order = buildTestOrder(status: OrderStatus.pendiente);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .assignCadete(order, 'cadete-1');
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.assignedCadeteId, 'cadete-1');
+      expect(saved.status, OrderStatus.asignado);
+    });
+
+    test('is rejected once the order is enCamino (no reassignment)', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .assignCadete(order, 'cadete-2');
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.assignedCadeteId, isNull);
+      expect(saved.status, OrderStatus.enCamino);
+    });
+  });
+}

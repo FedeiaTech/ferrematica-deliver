@@ -3,9 +3,22 @@
 library;
 
 /// Lifecycle of an [Order]. Forward-only progression `pendiente` →
-/// `asignado` → `entregado`; any state MAY transition to `cancelado`.
-/// Deliberately excludes `en_camino` for this slice (decision #1).
-enum OrderStatus { pendiente, asignado, entregado, cancelado }
+/// `asignado` → `en_camino` → `entregado`; any state MAY transition to
+/// `cancelado`.
+///
+/// `enCamino` is deliberately **appended** at the end of this declaration
+/// instead of being declared between `asignado` and `entregado` — see
+/// `navegacion-cadete` design decision #6. `OrderModel.status` in
+/// `order_model.dart` is annotated `@enumerated`, which defaults to Isar's
+/// `EnumType.ordinal` storage: it persists the enum's *declaration index*,
+/// not its name. Inserting `enCamino` mid-declaration would silently shift
+/// `entregado` from ordinal 2→3 and `cancelado` from 3→4, corrupting the
+/// status of every existing local row on the next read. The *logical*
+/// lifecycle position (between `asignado` and `entregado`) lives instead in
+/// `providers.dart`'s `_forwardLifecycle` list, which `isValidTransition`
+/// indexes by list position — not by enum ordinal — so it is free to encode
+/// the real order without touching on-disk storage.
+enum OrderStatus { pendiente, asignado, entregado, cancelado, enCamino }
 
 /// How the order will be / was paid. `sinDefinir` is the default until the
 /// dueño fills it in.
