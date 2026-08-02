@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../auth/presentation/providers.dart' show cadeteListProvider;
 import '../../domain/order.dart';
 import '../providers.dart';
+import '../widgets/assign_cadete_sheet.dart';
 import '../widgets/incomplete_badge.dart';
 import '../widgets/order_card.dart'
     show orderStatusColor, orderStatusIcon, orderStatusLabel;
@@ -11,9 +13,11 @@ import '../widgets/payment_pending_banner.dart';
 import '../widgets/sync_status_chip.dart';
 
 /// Read view for a single order plus its owner-facing actions: edit,
-/// cancel, delete (soft), and "Marcar entregado" — the last one opens a
-/// sheet offering `cobrado`/`cobro pendiente`; pending never blocks the
-/// transition (spec's "Delivered with pending payment" scenario).
+/// cancel, delete (soft), "Marcar entregado" (opens a sheet offering
+/// `cobrado`/`cobro pendiente`; pending never blocks the transition, per
+/// spec's "Delivered with pending payment" scenario), and "Asignar cadete"
+/// (opens `assign_cadete_sheet.dart`, restricted to `pendiente`/`asignado`
+/// orders per spec's order-assignment requirement).
 class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({required this.orderId, super.key});
 
@@ -52,6 +56,11 @@ class _OrderDetailBody extends ConsumerWidget {
       OrderStatus.entregado,
     );
     final canCancel = order.status != OrderStatus.cancelado;
+    // Spec's order-assignment requirement: assignable only while
+    // pendiente/asignado — once en_camino or later, reassignment is
+    // rejected (matches OrdersController.assignCadete's own guard).
+    final canAssignCadete =
+        order.status == OrderStatus.pendiente || order.status == OrderStatus.asignado;
     final statusColor = orderStatusColor(order.status);
 
     return ListView(
@@ -102,6 +111,8 @@ class _OrderDetailBody extends ConsumerWidget {
         ),
         if (order.notes != null)
           _DetailRow(label: 'Notas', value: order.notes!),
+        if (order.assignedCadeteId != null)
+          _CadeteAssignedRow(cadeteId: order.assignedCadeteId!),
         const SizedBox(height: 24),
         Wrap(
           spacing: 12,
@@ -117,6 +128,14 @@ class _OrderDetailBody extends ConsumerWidget {
                 onPressed: () => _openMarkDeliveredSheet(context, ref, order),
                 icon: const Icon(Icons.local_shipping_outlined),
                 label: const Text('Marcar entregado'),
+              ),
+            if (canAssignCadete)
+              OutlinedButton.icon(
+                onPressed: () => _openAssignCadeteSheet(context, ref, order),
+                icon: const Icon(Icons.person_add_alt_outlined),
+                label: Text(
+                  order.assignedCadeteId == null ? 'Asignar cadete' : 'Reasignar cadete',
+                ),
               ),
             if (canCancel)
               OutlinedButton.icon(
@@ -178,6 +197,18 @@ class _OrderDetailBody extends ConsumerWidget {
         .markDelivered(order, paymentStatus: paymentStatus);
   }
 
+  Future<void> _openAssignCadeteSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final cadeteId = await showAssignCadeteSheet(context);
+    if (cadeteId == null) return;
+    await ref
+        .read(ordersControllerProvider.notifier)
+        .assignCadete(order, cadeteId);
+  }
+
   Future<void> _confirmCancel(
     BuildContext context,
     WidgetRef ref,
@@ -231,6 +262,32 @@ class _OrderDetailBody extends ConsumerWidget {
       await ref.read(ordersControllerProvider.notifier).deleteOrder(order.id);
       if (context.mounted && context.canPop()) context.pop();
     }
+  }
+}
+
+/// Resolves and shows the assigned cadete's display name against the
+/// already-fetched [cadeteListProvider] roster, falling back to the raw id
+/// while that list is loading/errored/stale — good enough for this
+/// read-only row (the picker itself is the source of truth for who gets
+/// assigned).
+class _CadeteAssignedRow extends ConsumerWidget {
+  const _CadeteAssignedRow({required this.cadeteId});
+
+  final String cadeteId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cadetesAsync = ref.watch(cadeteListProvider);
+    final name = cadetesAsync.maybeWhen(
+      data: (cadetes) {
+        for (final cadete in cadetes) {
+          if (cadete.id == cadeteId) return cadete.displayName;
+        }
+        return cadeteId;
+      },
+      orElse: () => cadeteId,
+    );
+    return _DetailRow(label: 'Cadete asignado', value: name);
   }
 }
 
