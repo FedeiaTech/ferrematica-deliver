@@ -152,7 +152,17 @@ class _NavigationMapBody extends ConsumerWidget {
               left: 12,
               right: 12,
               bottom: 12,
-              child: _RouteInfoCard(route: data.route),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (data.isFromCache) ...[
+                    const _OfflineRouteBanner(),
+                    const SizedBox(height: 8),
+                  ],
+                  _RouteInfoCard(route: data.route),
+                ],
+              ),
             ),
           ],
         );
@@ -240,6 +250,40 @@ class _RouteInfoCard extends StatelessWidget {
           children: [
             Text('${distanceKm.toStringAsFixed(1)} km'),
             Text('$durationMinutes min'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown above [_RouteInfoCard] when [NavigationRouteData.isFromCache] is
+/// `true` (spec's "Offline route fallback"): the route being displayed is
+/// the last-known one, not a freshly re-fetched route — read-only, no live
+/// re-routing is attempted while this banner is visible.
+class _OfflineRouteBanner extends StatelessWidget {
+  const _OfflineRouteBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              Icons.cloud_off,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sin conexión, mostrando última ruta conocida',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
           ],
         ),
       ),

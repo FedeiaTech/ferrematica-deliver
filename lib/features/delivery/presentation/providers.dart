@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/presentation/providers.dart';
 import '../../orders/domain/order.dart';
 import '../../orders/presentation/providers.dart' show ordersStreamProvider;
-import '../data/providers.dart' show directionsClientProvider, locationClientProvider;
+import '../data/providers.dart'
+    show directionsClientProvider, locationClientProvider, routeCacheProvider;
 import '../domain/directions_client.dart' as directions;
 import '../domain/location_client.dart';
+import '../domain/route_cache.dart';
 
 /// [ordersStreamProvider] filtered client-side to only the orders assigned
 /// to the currently signed-in cadete (spec's `cadete-orders` domain:
@@ -68,34 +70,82 @@ final class NavigationTarget {
 /// la ruta") rather than treating a missing location or route as an error,
 /// per spec's "Map with destination and route" requirement and design's
 /// "permission denial degrades to destination-marker-only" (decision #12).
+///
+/// [isFromCache] is `true` when [route] came from the offline [RouteCache]
+/// fallback rather than a fresh Directions call (spec's "Offline route
+/// fallback": read-only, no live re-routing without signal) — the screen
+/// uses it to show a "sin conexión" banner.
 final class NavigationRouteData {
-  const NavigationRouteData({required this.currentLocation, required this.route});
+  const NavigationRouteData({
+    required this.currentLocation,
+    required this.route,
+    this.isFromCache = false,
+  });
 
   final DeviceLocation? currentLocation;
   final directions.RouteResult? route;
+  final bool isFromCache;
 }
 
 /// Fetches the cadete's current location, then (if available) the driving
 /// route to [target]'s destination — one Directions API request per screen
 /// open, matching design decision #10 ("one request per `en_camino`
-/// transition, not per location tick"; PR7 will add the offline cache that
-/// avoids re-fetching on a later screen open for the same in-progress
-/// delivery).
+/// transition, not per location tick").
+///
+/// Offline fallback (spec's "Offline route fallback", design decision #11):
+/// every successful Directions fetch is written to [routeCacheProvider],
+/// keyed by `target.orderId`, so the first successful fetch after the
+/// `asignado` -> `en_camino` transition (when the cadete starts navigation)
+/// seeds the cache. If a later fetch fails — no current location, or the
+/// Directions call itself fails, which is how [DirectionsClient] also
+/// reports "no connectivity" — the last-cached route for this order (if
+/// any) is returned instead, read-only, with [NavigationRouteData
+/// .isFromCache] set so the UI can flag it; no re-routing is attempted from
+/// the cached data.
 final navigationRouteProvider =
     FutureProvider.family<NavigationRouteData, NavigationTarget>((ref, target) async {
       final locationClient = ref.watch(locationClientProvider);
       final currentLocation = await locationClient.getCurrentLocation();
-      if (currentLocation == null) {
-        return const NavigationRouteData(currentLocation: null, route: null);
-      }
 
       final directionsClient = ref.watch(directionsClientProvider);
-      final route = await directionsClient.route(
-        from: directions.LatLng(
-          latitude: currentLocation.latitude,
-          longitude: currentLocation.longitude,
-        ),
-        to: directions.LatLng(latitude: target.latitude, longitude: target.longitude),
-      );
-      return NavigationRouteData(currentLocation: currentLocation, route: route);
+      final routeCache = ref.watch(routeCacheProvider);
+
+      directions.RouteResult? route;
+      if (currentLocation != null) {
+        route = await directionsClient.route(
+          from: directions.LatLng(
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+          ),
+          to: directions.LatLng(latitude: target.latitude, longitude: target.longitude),
+        );
+      }
+
+      if (route != null) {
+        await routeCache.write(
+          target.orderId,
+          CachedRoute(
+            polylinePoints: route.polylinePoints,
+            distanceMeters: route.distanceMeters,
+            durationSeconds: route.durationSeconds,
+            cachedAt: DateTime.now(),
+          ),
+        );
+        return NavigationRouteData(currentLocation: currentLocation, route: route);
+      }
+
+      final cached = await routeCache.read(target.orderId);
+      if (cached != null) {
+        return NavigationRouteData(
+          currentLocation: currentLocation,
+          route: directions.RouteResult(
+            polylinePoints: cached.polylinePoints,
+            distanceMeters: cached.distanceMeters,
+            durationSeconds: cached.durationSeconds,
+          ),
+          isFromCache: true,
+        );
+      }
+
+      return NavigationRouteData(currentLocation: currentLocation, route: null);
     });
