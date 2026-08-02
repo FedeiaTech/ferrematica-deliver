@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
 import '../domain/app_session.dart';
+import '../domain/cadete_directory.dart';
 
 /// The resolved session (userId + rol), or `null` when signed out, or an
 /// [AsyncError] if the `profiles` role lookup failed. This is the single
@@ -33,3 +34,13 @@ class LoginController extends Notifier<AsyncValue<void>> {
 
 final NotifierProvider<LoginController, AsyncValue<void>> loginControllerProvider =
     NotifierProvider<LoginController, AsyncValue<void>>(LoginController.new);
+
+/// One-shot fetch of every available cadete account, consumed by the
+/// dueño-facing "assign cadete" sheet (`assign_cadete_sheet.dart`). A plain
+/// [FutureProvider] (not a stream) is enough — the picker is opened fresh
+/// each time from a modal bottom sheet, so there is no long-lived UI to
+/// keep in sync with cadete roster changes mid-session.
+final FutureProvider<List<CadeteProfile>> cadeteListProvider =
+    FutureProvider<List<CadeteProfile>>((ref) {
+      return ref.watch(cadeteDirectoryProvider).listCadetes();
+    });

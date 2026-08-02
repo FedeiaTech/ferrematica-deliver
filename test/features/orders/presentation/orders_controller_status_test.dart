@@ -119,6 +119,19 @@ void main() {
       expect(saved.status, OrderStatus.asignado);
     });
 
+    test('reassigns from asignado (still allowed pre-en_camino)', () async {
+      final order = buildTestOrder(status: OrderStatus.asignado);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .assignCadete(order, 'cadete-2');
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.assignedCadeteId, 'cadete-2');
+      expect(saved.status, OrderStatus.asignado);
+    });
+
     test('is rejected once the order is enCamino (no reassignment)', () async {
       final order = buildTestOrder(status: OrderStatus.enCamino);
       await repository.save(order);
@@ -130,6 +143,19 @@ void main() {
       final saved = await repository.getById(order.id);
       expect(saved!.assignedCadeteId, isNull);
       expect(saved.status, OrderStatus.enCamino);
+    });
+
+    test('is rejected once the order is entregado (no reassignment)', () async {
+      final order = buildTestOrder(status: OrderStatus.entregado);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .assignCadete(order, 'cadete-2');
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.assignedCadeteId, isNull);
+      expect(saved.status, OrderStatus.entregado);
     });
   });
 }
