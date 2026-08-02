@@ -55,7 +55,7 @@ No existe un tercer rol de "cliente final" en esta versión: los pedidos ingresa
 | App móvil | **Flutter** | Un solo codebase Android/iOS, buen soporte de mapas y background location. |
 | Backend / DB | **Supabase** (Postgres + Auth + Realtime + Storage) | Modelo relacional real para pedidos/clientes/cadetes, Realtime para tracking en vivo. |
 | Autenticación | **Supabase Auth** (email + contraseña) | El dueño crea las cuentas de los cadetes desde su panel; sin fricción de SMS/OTP. |
-| Mapas y ruteo | **Google Maps Platform** (`google_maps_flutter` + Directions API) | Markers personalizados, `Polyline` para banda de recorrido, 10.000 requests/mes gratis (SKU Essentials) — sobra para 1-3 cadetes. |
+| Mapas y ruteo | **OpenStreetMap** (`flutter_map` + Nominatim + OSRM) | Sin API key ni tarjeta de crédito requerida (Google Maps Platform exige tarjeta para todas sus APIs, sin excepción). Markers personalizados, `Polyline` para banda de recorrido; OSRM demo público sirve para el volumen esperado (1-3 cadetes) pero requiere self-host antes de escalar. |
 | Estado / arquitectura app | Riverpod o Bloc (a definir en diseño técnico) | Separación por capas (presentación / dominio / datos). |
 
 ## 6. Modelo de datos (entidades principales)
@@ -103,7 +103,7 @@ No existe un tercer rol de "cliente final" en esta versión: los pedidos ingresa
 
 ### 7.2 Entrega (Cadete)
 1. Cadete ve el pedido asignado en su lista (con dirección, monto a cobrar, nombre/nick del cliente, teléfono, notas).
-2. Abre el mapa: pin de destino con ícono personalizado + banda de recorrido calculada desde su ubicación actual (Directions API).
+2. Abre el mapa: pin de destino con ícono personalizado + banda de recorrido calculada desde su ubicación actual (OSRM).
 3. Marca "en camino" al salir → dueño ve el estado actualizado.
 4. Al llegar, marca "entregado" y confirma cobro (efectivo recibido / transferencia confirmada).
 5. Pedido pasa a `entregado`, queda en historial.
@@ -134,7 +134,7 @@ No existe un tercer rol de "cliente final" en esta versión: los pedidos ingresa
 
 - **Tiempo real**: cambios de estado de pedido y ubicación del cadete deben reflejarse en la app del dueño en segundos (Supabase Realtime).
 - **Offline básico**: pedido asignado visible sin conexión; sincronización diferida de cambios de estado.
-- **Costos de mapas**: diseño pensado para mantenerse dentro del free tier de Google Maps (10.000 requests/mes de Directions API) dado el volumen esperado (1-3 cadetes).
+- **Costos de mapas**: stack 100% gratuito (OpenStreetMap tiles, Nominatim, OSRM demo público), sin costo ni tarjeta de crédito requerida para el volumen esperado (1-3 cadetes). El servidor demo de OSRM no está licenciado para tráfico de producción a escala; escalar requeriría self-hostear OSRM.
 - **Plataformas**: Android e iOS.
 
 ## 10. Seguridad
@@ -145,7 +145,7 @@ No existe un tercer rol de "cliente final" en esta versión: los pedidos ingresa
   - Solo el rol `owner` puede crear, editar o reasignar pedidos, y dar de alta cadetes.
   - Ningún usuario puede leer datos de otro cadete (ubicación, historial) salvo el dueño.
 - **Transporte**: toda comunicación cliente-servidor vía HTTPS/TLS (Supabase lo fuerza por defecto). Sin excepciones para tráfico de ubicación en tiempo real.
-- **API keys de Google Maps**: la key se restringe por *application restriction* (SHA-1 del APK firmado en Android, Bundle ID en iOS) y por *API restriction* (solo Maps SDK + Directions API habilitadas), para que no pueda reutilizarse si se filtra.
+- **Sin API keys de mapas**: el stack OpenStreetMap (`flutter_map`, Nominatim, OSRM) no requiere ninguna API key, así que no hay superficie de key filtrada/reutilizable que asegurar en este punto.
 - **Datos sensibles**:
   - Contraseñas: gestionadas y hasheadas por Supabase Auth (nunca en texto plano en la app).
   - Ubicación del cadete: se persiste solo mientras el pedido está activo; no se conserva historial de tracking indefinido salvo que se decida lo contrario para auditoría.

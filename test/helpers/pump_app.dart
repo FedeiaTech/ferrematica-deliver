@@ -21,7 +21,6 @@ import 'test_isar.dart';
 const AppConfig fakeAppConfig = AppConfig(
   supabaseUrl: 'https://fake.supabase.test',
   supabaseAnonKey: 'fake-anon-key',
-  mapsApiKey: 'fake-maps-key',
 );
 
 /// Mocktail double for [SupabaseClient]. Per design decision #7, vendor

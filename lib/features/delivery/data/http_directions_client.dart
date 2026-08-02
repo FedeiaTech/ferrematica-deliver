@@ -4,66 +4,55 @@ import 'package:http/http.dart' as http;
 
 import '../domain/directions_client.dart';
 
-/// [DirectionsClient] backed by a raw HTTPS call to Google's Directions API
-/// (design decision #10 — same `http` transport as [HttpGeocodingClient];
-/// `google_maps_flutter` ships no Directions API of its own).
+/// [DirectionsClient] backed by a raw HTTPS call to
+/// [OSRM](http://project-osrm.org/)'s public demo routing server — no API
+/// key, no billing card required (design decision: replaces the Google
+/// Directions API to remove the hard Google Cloud billing-card blocker).
 ///
-/// Never throws: a network error, non-200 response, non-`OK` API status, an
+/// The public demo server (`router.project-osrm.org`) is dev-only — its
+/// terms of use do not license it for production-scale traffic; scaling
+/// this app in production would require self-hosting an OSRM instance.
+///
+/// Never throws: a network error, non-200 response, non-`Ok` API code, an
 /// empty route list, or a malformed body are all swallowed and reported as
 /// `null` — the navigation map screen degrades to a destination-marker-only
 /// view rather than crashing when a route can't be computed.
 class HttpDirectionsClient implements DirectionsClient {
-  HttpDirectionsClient({required String apiKey, http.Client? httpClient})
-    : _apiKey = apiKey,
-      _httpClient = httpClient ?? http.Client();
+  HttpDirectionsClient({http.Client? httpClient}) : _httpClient = httpClient ?? http.Client();
 
-  static const String _baseUrl = 'https://maps.googleapis.com/maps/api/directions/json';
+  static const String _baseUrl = 'https://router.project-osrm.org/route/v1/driving';
 
-  final String _apiKey;
   final http.Client _httpClient;
 
   @override
   Future<RouteResult?> route({required LatLng from, required LatLng to}) async {
-    if (_apiKey.isEmpty) return null;
-
     try {
-      final uri = Uri.parse(_baseUrl).replace(
-        queryParameters: <String, String>{
-          'origin': '${from.latitude},${from.longitude}',
-          'destination': '${to.latitude},${to.longitude}',
-          'mode': 'driving',
-          'key': _apiKey,
-        },
+      // OSRM's URL path wants `lon,lat` order (opposite of this app's own
+      // LatLng(latitude, longitude) field order) — do not swap these.
+      final coordinates =
+          '${from.longitude},${from.latitude};${to.longitude},${to.latitude}';
+      final uri = Uri.parse('$_baseUrl/$coordinates').replace(
+        queryParameters: const <String, String>{'overview': 'full', 'geometries': 'polyline'},
       );
       final response = await _httpClient.get(uri);
       if (response.statusCode != 200) return null;
 
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) return null;
-      if (decoded['status'] != 'OK') return null;
+      if (decoded['code'] != 'Ok') return null;
 
       final routes = decoded['routes'];
       if (routes is! List || routes.isEmpty) return null;
       final firstRoute = routes.first;
       if (firstRoute is! Map<String, dynamic>) return null;
 
-      final overviewPolyline = firstRoute['overview_polyline'];
-      if (overviewPolyline is! Map<String, dynamic>) return null;
-      final encodedPoints = overviewPolyline['points'];
+      final encodedPoints = firstRoute['geometry'];
       if (encodedPoints is! String || encodedPoints.isEmpty) return null;
 
-      final legs = firstRoute['legs'];
-      if (legs is! List || legs.isEmpty) return null;
-      final firstLeg = legs.first;
-      if (firstLeg is! Map<String, dynamic>) return null;
-
-      final distance = firstLeg['distance'];
-      final duration = firstLeg['duration'];
-      if (distance is! Map<String, dynamic> || duration is! Map<String, dynamic>) {
-        return null;
-      }
-      final distanceMeters = distance['value'];
-      final durationSeconds = duration['value'];
+      // Unlike Google's Directions API, OSRM's distance/duration are
+      // top-level numeric fields on the route, not nested under `.value`.
+      final distanceMeters = firstRoute['distance'];
+      final durationSeconds = firstRoute['duration'];
       if (distanceMeters is! num || durationSeconds is! num) return null;
 
       final points = _decodePolyline(encodedPoints);
@@ -71,20 +60,22 @@ class HttpDirectionsClient implements DirectionsClient {
 
       return RouteResult(
         polylinePoints: points,
-        distanceMeters: distanceMeters.toInt(),
-        durationSeconds: durationSeconds.toInt(),
+        distanceMeters: distanceMeters.round(),
+        durationSeconds: durationSeconds.round(),
       );
     } catch (_) {
-      // Network failure, timeout, malformed JSON, placeholder/invalid API
-      // key, etc. — all treated identically as "could not compute route".
+      // Network failure, timeout, malformed JSON, etc. — all treated
+      // identically as "could not compute route".
       return null;
     }
   }
 
-  /// Decodes Google's [encoded polyline algorithm](https://developers.google.com/maps/documentation/utilities/polylinealgorithm)
-  /// into a list of [LatLng] points. Returns an empty list for malformed
-  /// input instead of throwing, matching this client's "never throws"
-  /// contract.
+  /// Decodes the [encoded polyline algorithm](https://developers.google.com/maps/documentation/utilities/polylinealgorithm)
+  /// (precision 5) into a list of [LatLng] points. OSRM's default
+  /// `geometries=polyline` output uses this same encoding, so this decoder
+  /// (originally written for Google's Directions API) is reused as-is.
+  /// Returns an empty list for malformed input instead of throwing,
+  /// matching this client's "never throws" contract.
   static List<LatLng> _decodePolyline(String encoded) {
     final points = <LatLng>[];
     var index = 0;

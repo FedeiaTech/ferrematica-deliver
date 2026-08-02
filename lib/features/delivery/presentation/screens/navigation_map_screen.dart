@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:latlong2/latlong.dart' as latlong;
 
 import '../../../orders/domain/order.dart';
 import '../../../orders/presentation/providers.dart' show orderByIdProvider;
@@ -25,21 +26,28 @@ import '../providers.dart';
 /// crash") — a `null` destination coordinate, a denied location permission,
 /// and a failed Directions request are all rendered as an explicit message
 /// instead of an exception.
+///
+/// Map rendering uses `flutter_map` with raster tiles from
+/// `tile.openstreetmap.org` (no API key, no billing card — see
+/// `HttpGeocodingClient`/`HttpDirectionsClient` for the same rationale on
+/// the geocoding/directions side).
 class NavigationMapScreen extends ConsumerWidget {
   const NavigationMapScreen({required this.orderId, this.mapBuilder, super.key});
 
   final String orderId;
 
-  /// Test seam (design's testing strategy: "`GoogleMap` is a platform view
-  /// and is untestable in the widget harness ... assert around it"). `null`
-  /// (the production default) builds the real [gmaps.GoogleMap]; widget
-  /// tests substitute a plain placeholder so they never touch a platform
-  /// view, and instead assert on the surrounding loading/error/data state.
+  /// Test seam (design's testing strategy — mirrors the previous
+  /// `GoogleMap` platform-view seam, but `flutter_map`'s `FlutterMap` is a
+  /// plain widget, not a platform view; the seam is kept anyway so widget
+  /// tests never issue real tile-network requests). `null` (the production
+  /// default) builds the real [FlutterMap]; widget tests substitute a plain
+  /// placeholder so they never touch real tiles, and instead assert on the
+  /// surrounding loading/error/data state.
   @visibleForTesting
   final Widget Function({
-    required gmaps.CameraPosition initialCameraPosition,
-    required Set<gmaps.Marker> markers,
-    required Set<gmaps.Polyline> polylines,
+    required latlong.LatLng initialCenter,
+    required List<Marker> markers,
+    required List<Polyline> polylines,
   })?
   mapBuilder;
 
@@ -79,9 +87,9 @@ class _NavigationMapBody extends ConsumerWidget {
 
   final Order order;
   final Widget Function({
-    required gmaps.CameraPosition initialCameraPosition,
-    required Set<gmaps.Marker> markers,
-    required Set<gmaps.Polyline> polylines,
+    required latlong.LatLng initialCenter,
+    required List<Marker> markers,
+    required List<Polyline> polylines,
   })?
   mapBuilder;
 
@@ -94,40 +102,39 @@ class _NavigationMapBody extends ConsumerWidget {
     );
     final routeAsync = ref.watch(navigationRouteProvider(target));
 
-    final destination = gmaps.LatLng(order.latitude!, order.longitude!);
-    final destinationMarker = gmaps.Marker(
-      markerId: const gmaps.MarkerId('destination'),
-      position: destination,
-      infoWindow: const gmaps.InfoWindow(title: 'Destino'),
+    final destination = latlong.LatLng(order.latitude!, order.longitude!);
+    final destinationMarker = Marker(
+      point: destination,
+      width: 40,
+      height: 40,
+      alignment: Alignment.topCenter,
+      child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
     );
 
     return routeAsync.when(
       data: (data) {
-        final markers = <gmaps.Marker>{destinationMarker};
-        final polylines = <gmaps.Polyline>{};
+        final markers = <Marker>[destinationMarker];
+        final polylines = <Polyline>[];
         if (data.currentLocation != null) {
           markers.add(
-            gmaps.Marker(
-              markerId: const gmaps.MarkerId('current-location'),
-              position: gmaps.LatLng(
+            Marker(
+              point: latlong.LatLng(
                 data.currentLocation!.latitude,
                 data.currentLocation!.longitude,
               ),
-              icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(
-                gmaps.BitmapDescriptor.hueAzure,
-              ),
-              infoWindow: const gmaps.InfoWindow(title: 'Tu ubicación'),
+              width: 30,
+              height: 30,
+              child: const Icon(Icons.my_location, color: Colors.blue),
             ),
           );
         }
         if (data.route != null) {
           polylines.add(
-            gmaps.Polyline(
-              polylineId: const gmaps.PolylineId('route'),
+            Polyline(
               points: data.route!.polylinePoints
-                  .map((point) => gmaps.LatLng(point.latitude, point.longitude))
+                  .map((point) => latlong.LatLng(point.latitude, point.longitude))
                   .toList(growable: false),
-              width: 4,
+              strokeWidth: 4,
               color: Theme.of(context).colorScheme.primary,
             ),
           );
@@ -135,16 +142,13 @@ class _NavigationMapBody extends ConsumerWidget {
 
         return Stack(
           children: [
-            (mapBuilder ?? _buildGoogleMap)(
-              initialCameraPosition: gmaps.CameraPosition(
-                target: data.currentLocation != null
-                    ? gmaps.LatLng(
-                        data.currentLocation!.latitude,
-                        data.currentLocation!.longitude,
-                      )
-                    : destination,
-                zoom: 14,
-              ),
+            (mapBuilder ?? _buildFlutterMap)(
+              initialCenter: data.currentLocation != null
+                  ? latlong.LatLng(
+                      data.currentLocation!.latitude,
+                      data.currentLocation!.longitude,
+                    )
+                  : destination,
               markers: markers,
               polylines: polylines,
             ),
@@ -169,10 +173,10 @@ class _NavigationMapBody extends ConsumerWidget {
       },
       loading: () => Stack(
         children: [
-          (mapBuilder ?? _buildGoogleMap)(
-            initialCameraPosition: gmaps.CameraPosition(target: destination, zoom: 14),
-            markers: {destinationMarker},
-            polylines: const <gmaps.Polyline>{},
+          (mapBuilder ?? _buildFlutterMap)(
+            initialCenter: destination,
+            markers: [destinationMarker],
+            polylines: const <Polyline>[],
           ),
           const Positioned(
             left: 12,
@@ -199,10 +203,10 @@ class _NavigationMapBody extends ConsumerWidget {
       ),
       error: (error, _) => Stack(
         children: [
-          (mapBuilder ?? _buildGoogleMap)(
-            initialCameraPosition: gmaps.CameraPosition(target: destination, zoom: 14),
-            markers: {destinationMarker},
-            polylines: const <gmaps.Polyline>{},
+          (mapBuilder ?? _buildFlutterMap)(
+            initialCenter: destination,
+            markers: [destinationMarker],
+            polylines: const <Polyline>[],
           ),
           const Positioned(
             left: 12,
@@ -215,16 +219,26 @@ class _NavigationMapBody extends ConsumerWidget {
     );
   }
 
-  Widget _buildGoogleMap({
-    required gmaps.CameraPosition initialCameraPosition,
-    required Set<gmaps.Marker> markers,
-    required Set<gmaps.Polyline> polylines,
+  Widget _buildFlutterMap({
+    required latlong.LatLng initialCenter,
+    required List<Marker> markers,
+    required List<Polyline> polylines,
   }) {
-    return gmaps.GoogleMap(
-      initialCameraPosition: initialCameraPosition,
-      markers: markers,
-      polylines: polylines,
-      myLocationButtonEnabled: false,
+    return FlutterMap(
+      options: MapOptions(initialCenter: initialCenter, initialZoom: 14),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.ferrematica.express',
+        ),
+        PolylineLayer(polylines: polylines),
+        MarkerLayer(markers: markers),
+        // Required by OpenStreetMap's tile usage policy — see
+        // https://operations.osmfoundation.org/policies/tiles/.
+        RichAttributionWidget(
+          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+        ),
+      ],
     );
   }
 }

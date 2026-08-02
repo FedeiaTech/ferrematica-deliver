@@ -6,47 +6,38 @@ Scaffold Flutter para la app de delivery de Ferrematica (ver `SDD.md`).
 
 1. `flutter pub get`
 2. Copiar `dart_define.example.json` a `dart_define.json` (ignorado por git) y
-   completar los valores reales de `SUPABASE_URL` / `SUPABASE_ANON_KEY` /
-   `GOOGLE_MAPS_API_KEY`.
+   completar los valores reales de `SUPABASE_URL` / `SUPABASE_ANON_KEY`.
 3. Ejecutar con los secrets inyectados:
    `flutter run --dart-define-from-file=dart_define.json`
 
-### Configuración nativa de Google Maps
+### Mapa, geocoding y ruteo — stack OpenStreetMap (sin API key)
 
-La configuración nativa de Maps (Android/iOS) lee la API key desde
-**archivos locales de la máquina, ignorados por git**, no desde
-`dart_define.json` (los SDKs nativos no pueden leer los valores
-`--dart-define` de Dart):
+La app usa un stack 100% gratuito basado en OpenStreetMap en lugar de
+Google Maps Platform — Google exige tarjeta de crédito cargada para
+**todas** las APIs de Maps Platform (Maps SDK, Directions, Geocoding), sin
+excepción, y no fue posible conseguir la aprobación de una tarjeta para el
+proyecto. No hace falta ninguna API key ni configuración nativa
+(Android/iOS) para el mapa:
 
-- Android: `android/local.properties` → `MAPS_API_KEY=...`
-- iOS: copiar `ios/Runner/Config/Secrets.example.xcconfig` a
-  `ios/Runner/Config/Secrets.xcconfig` y completar `GOOGLE_MAPS_API_KEY`.
+- **Mapa**: `flutter_map` + tiles raster de
+  `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Sin key.
+- **Geocoding** (dirección → lat/lng): **Nominatim**
+  (`https://nominatim.openstreetmap.org/search`), implementado en
+  `HttpGeocodingClient`. Sin key, pero su
+  [política de uso](https://operations.osmfoundation.org/policies/nominatim/)
+  exige un header `User-Agent` descriptivo (ya seteado:
+  `Ferrematica/1.0 (delivery order geocoding)`) y limita a ~1 request/seg —
+  no es un problema para este uso (un geocode por alta/edición de pedido,
+  no en lote).
+- **Ruteo** (Directions): **OSRM**, servidor demo público
+  (`https://router.project-osrm.org`), implementado en
+  `HttpDirectionsClient`. Sin key.
 
-Ambos archivos vienen con un valor placeholder para que la app compile sin
-una key real (los pedidos a Maps simplemente van a fallar en runtime hasta
-que se configure una key real).
-
-**PASO MANUAL — no se puede automatizar con sdd-apply:** antes de publicar
-la app, la API key real de Google Maps DEBE restringirse en la
-[Google Cloud Console](https://console.cloud.google.com/):
-
-- Android: restringir por el fingerprint SHA-1 del certificado de firma de
-  la app + el nombre de paquete `com.ferrematica.express`.
-- iOS: restringir por el Bundle ID `com.ferrematica.express`.
-
-Una key sin restricciones embebida en un binario publicado no es secreta —
-se puede extraer del APK/IPA. La restricción es lo que realmente la
-protege.
-
-**La misma `GOOGLE_MAPS_API_KEY` se reutiliza para Directions y Geocoding**
-(`sdd/navegacion-cadete`, decisiones #9/#10): `HttpDirectionsClient` y
-`HttpGeocodingClient` llaman directo por HTTPS a la Directions API y a la
-Geocoding API respectivamente, con la misma key que usa el SDK nativo de
-Google Maps. En la [Google Cloud Console](https://console.cloud.google.com/)
-hay que habilitar las tres APIs (**Maps SDK**, **Directions API**,
-**Geocoding API**) para el mismo proyecto/key — restringir la key solo por
-paquete/bundle-id (como se indica arriba) alcanza para las tres, no hace
-falta una key separada por API.
+**El servidor demo de OSRM es solo para desarrollo** — sus
+[términos de uso](http://project-osrm.org/) no lo habilitan para tráfico de
+producción a escala. Antes de escalar la app en producción hay que
+self-hostear una instancia propia de OSRM (o migrar a un proveedor de
+ruteo pago con SLA).
 
 ## Base de datos — migraciones de Supabase
 

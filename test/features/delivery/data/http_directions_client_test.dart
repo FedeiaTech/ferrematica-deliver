@@ -15,26 +15,27 @@ void main() {
   const to = LatLng(latitude: -34.6118, longitude: -58.3960);
 
   group('HttpDirectionsClient.route', () {
-    test('returns a route for a successful OK response', () async {
+    test('returns a route for a successful Ok response', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async {
-          expect(request.url.queryParameters['origin'], '-34.6037,-58.3816');
-          expect(request.url.queryParameters['destination'], '-34.6118,-58.396');
-          expect(request.url.queryParameters['key'], 'fake-key');
+          // OSRM wants lon,lat order in the URL path — opposite of this
+          // app's own LatLng(latitude, longitude) field order.
+          expect(
+            request.url.path,
+            endsWith('/route/v1/driving/-58.3816,-34.6037;-58.396,-34.6118'),
+          );
+          expect(request.url.queryParameters['overview'], 'full');
+          expect(request.url.queryParameters['geometries'], 'polyline');
           return http.Response(
             jsonEncode(<String, dynamic>{
-              'status': 'OK',
+              'code': 'Ok',
               'routes': [
                 {
-                  // Encodes a short 2-point polyline via Google's algorithm.
-                  'overview_polyline': {'points': '_p~iF~ps|U_ulLnnqC_mqNvxq`@'},
-                  'legs': [
-                    {
-                      'distance': {'value': 1500},
-                      'duration': {'value': 300},
-                    },
-                  ],
+                  // Encodes a short 2-point polyline via the standard
+                  // (precision-5) polyline algorithm, same as OSRM's default.
+                  'geometry': '_p~iF~ps|U_ulLnnqC_mqNvxq`@',
+                  'distance': 1500,
+                  'duration': 300,
                 },
               ],
             }),
@@ -51,12 +52,11 @@ void main() {
       expect(result.polylinePoints, isNotEmpty);
     });
 
-    test('returns null when the API status is not OK', () async {
+    test('returns null when the API code is not Ok', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'placeholder-key',
         httpClient: MockClient(
           (request) async => http.Response(
-            jsonEncode(<String, dynamic>{'status': 'REQUEST_DENIED', 'routes': []}),
+            jsonEncode(<String, dynamic>{'code': 'NoRoute', 'routes': []}),
             200,
           ),
         ),
@@ -67,14 +67,11 @@ void main() {
       expect(result, isNull);
     });
 
-    test('returns null when there are no routes (ZERO_RESULTS)', () async {
+    test('returns null when there are no routes', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient(
-          (request) async => http.Response(
-            jsonEncode(<String, dynamic>{'status': 'ZERO_RESULTS', 'routes': []}),
-            200,
-          ),
+          (request) async =>
+              http.Response(jsonEncode(<String, dynamic>{'code': 'Ok', 'routes': []}), 200),
         ),
       );
 
@@ -85,7 +82,6 @@ void main() {
 
     test('returns null on a non-200 HTTP response', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async => http.Response('Server error', 500)),
       );
 
@@ -96,7 +92,6 @@ void main() {
 
     test('returns null instead of throwing when the request throws', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async {
           throw const SocketExceptionStub();
         }),
@@ -109,7 +104,6 @@ void main() {
 
     test('returns null instead of throwing on malformed JSON', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async => http.Response('not json at all', 200)),
       );
 
@@ -120,22 +114,13 @@ void main() {
 
     test('returns null instead of throwing on a malformed encoded polyline', () async {
       final client = HttpDirectionsClient(
-        apiKey: 'fake-key',
         httpClient: MockClient(
           (request) async => http.Response(
             jsonEncode(<String, dynamic>{
-              'status': 'OK',
+              'code': 'Ok',
               'routes': [
-                {
-                  // Truncated/invalid polyline chunk: decoder must not throw.
-                  'overview_polyline': {'points': '_p'},
-                  'legs': [
-                    {
-                      'distance': {'value': 100},
-                      'duration': {'value': 30},
-                    },
-                  ],
-                },
+                // Truncated/invalid polyline chunk: decoder must not throw.
+                {'geometry': '_p', 'distance': 100, 'duration': 30},
               ],
             }),
             200,
@@ -146,22 +131,6 @@ void main() {
       final result = await client.route(from: from, to: to);
 
       expect(result, isNull);
-    });
-
-    test('returns null when the API key is empty (placeholder/unprovisioned)', () async {
-      var requested = false;
-      final client = HttpDirectionsClient(
-        apiKey: '',
-        httpClient: MockClient((request) async {
-          requested = true;
-          return http.Response('', 200);
-        }),
-      );
-
-      final result = await client.route(from: from, to: to);
-
-      expect(result, isNull);
-      expect(requested, isFalse);
     });
   });
 }

@@ -12,23 +12,17 @@ import 'package:http/testing.dart';
 /// the network" testing strategy.
 void main() {
   group('HttpGeocodingClient.geocode', () {
-    test('returns coordinates for a successful OK response', () async {
+    test('returns coordinates for a successful response', () async {
       final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async {
-          expect(request.url.queryParameters['address'], 'Av. Siempre Viva 742');
-          expect(request.url.queryParameters['key'], 'fake-key');
+          expect(request.url.queryParameters['q'], 'Av. Siempre Viva 742');
+          expect(request.url.queryParameters['format'], 'json');
+          expect(request.url.queryParameters['limit'], '1');
+          expect(request.headers['User-Agent'], contains('Ferrematica'));
           return http.Response(
-            jsonEncode(<String, dynamic>{
-              'status': 'OK',
-              'results': [
-                {
-                  'geometry': {
-                    'location': {'lat': -34.6037, 'lng': -58.3816},
-                  },
-                },
-              ],
-            }),
+            jsonEncode(<Map<String, dynamic>>[
+              {'lat': '-34.6037', 'lon': '-58.3816'},
+            ]),
             200,
           );
         }),
@@ -39,31 +33,9 @@ void main() {
       expect(result, const GeocodeResult(latitude: -34.6037, longitude: -58.3816));
     });
 
-    test('returns null when the API status is not OK (e.g. invalid key)', () async {
+    test('returns null when there are no results', () async {
       final client = HttpGeocodingClient(
-        apiKey: 'placeholder-key',
-        httpClient: MockClient(
-          (request) async => http.Response(
-            jsonEncode(<String, dynamic>{'status': 'REQUEST_DENIED', 'results': []}),
-            200,
-          ),
-        ),
-      );
-
-      final result = await client.geocode('Cualquier dirección 123');
-
-      expect(result, isNull);
-    });
-
-    test('returns null when there are no results (ZERO_RESULTS)', () async {
-      final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
-        httpClient: MockClient(
-          (request) async => http.Response(
-            jsonEncode(<String, dynamic>{'status': 'ZERO_RESULTS', 'results': []}),
-            200,
-          ),
-        ),
+        httpClient: MockClient((request) async => http.Response(jsonEncode(<dynamic>[]), 200)),
       );
 
       final result = await client.geocode('dirección informal sin sentido');
@@ -73,7 +45,6 @@ void main() {
 
     test('returns null on a non-200 HTTP response', () async {
       final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async => http.Response('Server error', 500)),
       );
 
@@ -84,7 +55,6 @@ void main() {
 
     test('returns null instead of throwing when the request throws', () async {
       final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async {
           throw const SocketExceptionStub();
         }),
@@ -98,8 +68,24 @@ void main() {
 
     test('returns null instead of throwing on malformed JSON', () async {
       final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async => http.Response('not json at all', 200)),
+      );
+
+      final result = await client.geocode('Calle Falsa 123');
+
+      expect(result, isNull);
+    });
+
+    test('returns null when lat/lon are not parseable strings', () async {
+      final client = HttpGeocodingClient(
+        httpClient: MockClient(
+          (request) async => http.Response(
+            jsonEncode(<Map<String, dynamic>>[
+              {'lat': 'not-a-number', 'lon': '-58.3816'},
+            ]),
+            200,
+          ),
+        ),
       );
 
       final result = await client.geocode('Calle Falsa 123');
@@ -110,7 +96,6 @@ void main() {
     test('returns null for an empty address without making a request', () async {
       var requested = false;
       final client = HttpGeocodingClient(
-        apiKey: 'fake-key',
         httpClient: MockClient((request) async {
           requested = true;
           return http.Response('', 200);
@@ -118,22 +103,6 @@ void main() {
       );
 
       final result = await client.geocode('   ');
-
-      expect(result, isNull);
-      expect(requested, isFalse);
-    });
-
-    test('returns null when the API key is empty (placeholder/unprovisioned)', () async {
-      var requested = false;
-      final client = HttpGeocodingClient(
-        apiKey: '',
-        httpClient: MockClient((request) async {
-          requested = true;
-          return http.Response('', 200);
-        }),
-      );
-
-      final result = await client.geocode('Calle Falsa 123');
 
       expect(result, isNull);
       expect(requested, isFalse);

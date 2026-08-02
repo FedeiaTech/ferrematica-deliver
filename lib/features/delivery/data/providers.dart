@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/config/providers.dart';
 import '../../../core/database/providers.dart';
 import '../domain/directions_client.dart';
 import '../domain/geocoding_client.dart';
@@ -11,21 +10,18 @@ import 'http_directions_client.dart';
 import 'http_geocoding_client.dart';
 import 'isar_route_cache.dart';
 
-/// The app's [GeocodingClient], backed by a raw HTTPS call to Google's
-/// Geocoding API using [AppConfig.mapsApiKey]. If the key is empty (or a
-/// placeholder), [HttpGeocodingClient.geocode] simply returns `null` for
-/// every address — see its doc comment; this is a normal "could not
-/// geocode" outcome, not a crash. Overridden in tests with a fake.
+/// The app's [GeocodingClient], backed by a raw HTTPS call to OpenStreetMap's
+/// Nominatim search API — no API key required. Overridden in tests with a
+/// fake.
 final Provider<GeocodingClient> geocodingClientProvider = Provider<GeocodingClient>(
-  (ref) => HttpGeocodingClient(apiKey: ref.watch(appConfigProvider).mapsApiKey),
+  (ref) => HttpGeocodingClient(),
 );
 
-/// The app's [DirectionsClient], backed by a raw HTTPS call to Google's
-/// Directions API using [AppConfig.mapsApiKey] (design decision #10 — same
-/// `http` transport as [geocodingClientProvider]). Overridden in tests with
-/// a fake.
+/// The app's [DirectionsClient], backed by a raw HTTPS call to OSRM's public
+/// routing server — no API key required (design decision: same `http`
+/// transport as [geocodingClientProvider]). Overridden in tests with a fake.
 final Provider<DirectionsClient> directionsClientProvider = Provider<DirectionsClient>(
-  (ref) => HttpDirectionsClient(apiKey: ref.watch(appConfigProvider).mapsApiKey),
+  (ref) => HttpDirectionsClient(),
 );
 
 /// The app's [LocationClient], backed by `package:geolocator` (design

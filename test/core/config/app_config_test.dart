@@ -7,18 +7,13 @@ void main() {
       const config = AppConfig(
         supabaseUrl: 'https://example.supabase.co',
         supabaseAnonKey: 'anon-key',
-        mapsApiKey: 'maps-key',
       );
 
       expect(config.isValid, isTrue);
     });
 
     test('isValid is false when supabaseUrl is empty', () {
-      const config = AppConfig(
-        supabaseUrl: '',
-        supabaseAnonKey: 'anon-key',
-        mapsApiKey: 'maps-key',
-      );
+      const config = AppConfig(supabaseUrl: '', supabaseAnonKey: 'anon-key');
 
       expect(config.isValid, isFalse);
     });
@@ -27,20 +22,9 @@ void main() {
       const config = AppConfig(
         supabaseUrl: 'https://example.supabase.co',
         supabaseAnonKey: '',
-        mapsApiKey: 'maps-key',
       );
 
       expect(config.isValid, isFalse);
-    });
-
-    test('isValid ignores an empty mapsApiKey', () {
-      const config = AppConfig(
-        supabaseUrl: 'https://example.supabase.co',
-        supabaseAnonKey: 'anon-key',
-        mapsApiKey: '',
-      );
-
-      expect(config.isValid, isTrue);
     });
 
     test('fromEnvironment builds a config with empty defaults when no '

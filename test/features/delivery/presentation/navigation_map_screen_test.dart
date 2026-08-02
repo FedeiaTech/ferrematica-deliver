@@ -13,13 +13,12 @@ import '../../../helpers/pump_app.dart';
 import '../../orders/presentation/fake_orders_repository.dart';
 
 /// Widget-level smoke coverage for [NavigationMapScreen], per design's
-/// testing strategy: "Do not mock Google Maps rendering — GoogleMap is a
-/// platform view and is untestable in the widget harness. Assert around
-/// it: inject a fake DirectionsClient + ... and verify the surrounding
-/// widgets." [NavigationMapScreen.mapBuilder] is the test seam that
-/// replaces the real `GoogleMap` platform view with a plain placeholder, so
-/// these tests only assert on the loading/error/data states around it, not
-/// on any map rendering.
+/// testing strategy: assert around the map rendering itself — inject a
+/// fake DirectionsClient + LocationClient + RouteCache and verify the
+/// surrounding widgets. [NavigationMapScreen.mapBuilder] is the test seam
+/// that replaces the real `FlutterMap` with a plain placeholder, so these
+/// tests never issue real OpenStreetMap tile requests and only assert on
+/// the loading/error/data states around the map.
 void main() {
   Widget withRouter(Widget home) {
     final router = GoRouter(
@@ -58,7 +57,7 @@ void main() {
       withRouter(
         NavigationMapScreen(
           orderId: 'order-1',
-          mapBuilder: ({required initialCameraPosition, required markers, required polylines}) =>
+          mapBuilder: ({required initialCenter, required markers, required polylines}) =>
               const SizedBox.shrink(),
         ),
       ),
@@ -79,7 +78,7 @@ void main() {
       withRouter(
         NavigationMapScreen(
           orderId: 'order-1',
-          mapBuilder: ({required initialCameraPosition, required markers, required polylines}) {
+          mapBuilder: ({required initialCenter, required markers, required polylines}) {
             mapBuilderCalls++;
             return SizedBox(key: Key('fake-map-${markers.length}-${polylines.length}'));
           },
@@ -125,7 +124,7 @@ void main() {
           NavigationMapScreen(
             orderId: 'order-1',
             mapBuilder:
-                ({required initialCameraPosition, required markers, required polylines}) =>
+                ({required initialCenter, required markers, required polylines}) =>
                     const SizedBox.shrink(),
           ),
         ),
@@ -158,7 +157,7 @@ void main() {
           NavigationMapScreen(
             orderId: 'order-1',
             mapBuilder:
-                ({required initialCameraPosition, required markers, required polylines}) =>
+                ({required initialCenter, required markers, required polylines}) =>
                     SizedBox(key: Key('fake-map-${markers.length}')),
           ),
         ),
@@ -186,7 +185,7 @@ void main() {
       withRouter(
         NavigationMapScreen(
           orderId: 'order-1',
-          mapBuilder: ({required initialCameraPosition, required markers, required polylines}) =>
+          mapBuilder: ({required initialCenter, required markers, required polylines}) =>
               const SizedBox.shrink(),
         ),
       ),
@@ -233,7 +232,7 @@ void main() {
             NavigationMapScreen(
               orderId: 'order-1',
               mapBuilder:
-                  ({required initialCameraPosition, required markers, required polylines}) =>
+                  ({required initialCenter, required markers, required polylines}) =>
                       const SizedBox.shrink(),
             ),
           ),
@@ -269,7 +268,7 @@ void main() {
             NavigationMapScreen(
               orderId: 'order-1',
               mapBuilder:
-                  ({required initialCameraPosition, required markers, required polylines}) =>
+                  ({required initialCenter, required markers, required polylines}) =>
                       const SizedBox.shrink(),
             ),
           ),
@@ -310,7 +309,7 @@ void main() {
         withRouter(
           NavigationMapScreen(
             orderId: 'order-1',
-            mapBuilder: ({required initialCameraPosition, required markers, required polylines}) =>
+            mapBuilder: ({required initialCenter, required markers, required polylines}) =>
                 const SizedBox.shrink(),
           ),
         ),
