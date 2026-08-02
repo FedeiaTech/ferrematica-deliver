@@ -78,6 +78,8 @@ String orderStatusLabel(OrderStatus status) {
       return 'Pendiente';
     case OrderStatus.asignado:
       return 'Asignado';
+    case OrderStatus.enCamino:
+      return 'En camino';
     case OrderStatus.entregado:
       return 'Entregado';
     case OrderStatus.cancelado:
@@ -95,6 +97,8 @@ Color orderStatusColor(OrderStatus status) {
       return Colors.amber.shade800;
     case OrderStatus.asignado:
       return Colors.blue.shade700;
+    case OrderStatus.enCamino:
+      return Colors.deepPurple.shade400;
     case OrderStatus.entregado:
       return Colors.green.shade700;
     case OrderStatus.cancelado:
@@ -110,6 +114,8 @@ IconData orderStatusIcon(OrderStatus status) {
       return Icons.schedule_outlined;
     case OrderStatus.asignado:
       return Icons.assignment_ind_outlined;
+    case OrderStatus.enCamino:
+      return Icons.local_shipping_outlined;
     case OrderStatus.entregado:
       return Icons.check_circle_outline;
     case OrderStatus.cancelado:
