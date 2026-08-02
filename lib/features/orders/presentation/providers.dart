@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:uuid/uuid.dart';
 
 import '../../auth/presentation/providers.dart';
+import '../../delivery/data/providers.dart' show geocodingClientProvider;
 import '../data/providers.dart';
 import '../domain/order.dart';
 import '../domain/orders_repository.dart';
@@ -116,13 +119,54 @@ class OrdersController extends Notifier<AsyncValue<void>> {
       items: items,
     );
     await _repository.save(order);
+    // Fire-and-forget (design decision #9): geocoding must never delay or
+    // block order creation returning to the caller. Failure is swallowed
+    // by [GeocodingClient] itself — see [_geocodeAndSave].
+    unawaited(_geocodeAndSave(order));
   }
 
   /// Persists edits to an existing [order]. Callers pass the already
   /// `copyWith`-updated order; this bumps `syncStatus` back to `pending`
   /// implicitly via `copyWith`'s default in the domain model.
+  ///
+  /// Re-geocodes only when `deliveryAddress` actually changed from the
+  /// previously-persisted row (spec: "geocode ... on order creation or
+  /// edit with a changed address"), so an unrelated edit (e.g. notes,
+  /// payment method) doesn't spend an unnecessary API call.
   Future<void> updateOrder(Order order) async {
-    await _repository.save(order.copyWith(syncStatus: SyncStatus.pending));
+    final previous = await _repository.getById(order.id);
+    final updated = order.copyWith(syncStatus: SyncStatus.pending);
+    await _repository.save(updated);
+    if (previous == null || previous.deliveryAddress != updated.deliveryAddress) {
+      unawaited(_geocodeAndSave(updated));
+    }
+  }
+
+  /// Best-effort background geocode of [order]'s `deliveryAddress`,
+  /// followed by a second save populating `latitude`/`longitude` if (and
+  /// only if) resolution succeeded. Runs after the caller-visible save has
+  /// already completed — per spec's "Geocoding does not block creation",
+  /// the order is already durably persisted with null coordinates before
+  /// this ever runs, so any failure here (including an unexpected throw
+  /// from a misbehaving [GeocodingClient] implementation) is caught and
+  /// simply results in no follow-up save.
+  Future<void> _geocodeAndSave(Order order) async {
+    try {
+      final client = ref.read(geocodingClientProvider);
+      final result = await client.geocode(order.deliveryAddress);
+      if (result == null) return;
+      final latest = await _repository.getById(order.id) ?? order;
+      await _repository.save(
+        latest.copyWith(
+          latitude: result.latitude,
+          longitude: result.longitude,
+          syncStatus: SyncStatus.pending,
+        ),
+      );
+    } catch (_) {
+      // Never let a geocoding failure surface — the order is already
+      // saved; this background step is best-effort only.
+    }
   }
 
   /// Cancels [order]. Allowed from any non-`cancelado` status per spec.
