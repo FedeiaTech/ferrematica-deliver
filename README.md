@@ -38,6 +38,33 @@ Una key sin restricciones embebida en un binario publicado no es secreta —
 se puede extraer del APK/IPA. La restricción es lo que realmente la
 protege.
 
+**La misma `GOOGLE_MAPS_API_KEY` se reutiliza para Directions y Geocoding**
+(`sdd/navegacion-cadete`, decisiones #9/#10): `HttpDirectionsClient` y
+`HttpGeocodingClient` llaman directo por HTTPS a la Directions API y a la
+Geocoding API respectivamente, con la misma key que usa el SDK nativo de
+Google Maps. En la [Google Cloud Console](https://console.cloud.google.com/)
+hay que habilitar las tres APIs (**Maps SDK**, **Directions API**,
+**Geocoding API**) para el mismo proyecto/key — restringir la key solo por
+paquete/bundle-id (como se indica arriba) alcanza para las tres, no hace
+falta una key separada por API.
+
+## Base de datos — migraciones de Supabase
+
+Las migraciones en `supabase/migrations/` (`0001_profiles.sql`,
+`0002_orders.sql`, `0003_en_camino_and_cadete_profiles.sql`) no se aplican
+solas: hay que correrlas a mano contra el proyecto Supabase real, en orden,
+desde el **SQL Editor** del Dashboard (o con la Supabase CLI si el proyecto
+ya está vinculado). Ninguna se aplicó nunca contra un proyecto real en este
+change — no existe todavía un proyecto Supabase vivo para este repo (ver
+sección siguiente), así que la corrección de las tres sigue siendo
+solo revisión de código, no verificación en runtime.
+
+`0003` en particular es la que suma soporte para `en_camino` y la
+asignación de cadetes (`sdd/navegacion-cadete`): sin aplicarla, el check
+constraint de `orders.status` sigue rechazando `'en_camino'` y la policy
+que deja a un dueño listar `profiles` con `rol='cadete'` no existe, así
+que la pantalla "Asignar cadete" no podría leer la lista de repartidores.
+
 ## Autenticación — alta de cuentas (dueño y cadete)
 
 La app usa Supabase Auth (email/password) para ambos roles. **No hay
