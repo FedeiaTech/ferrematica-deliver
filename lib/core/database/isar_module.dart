@@ -1,5 +1,6 @@
 import 'package:isar_community/isar.dart';
 
+import '../../features/delivery/data/route_cache_model.dart';
 import '../../features/orders/data/order_model.dart';
 import '../../features/orders/data/sync_cursor.dart';
 
@@ -8,6 +9,7 @@ import '../../features/orders/data/sync_cursor.dart';
 const List<CollectionSchema<dynamic>> isarSchemas = <CollectionSchema<dynamic>>[
   OrderModelSchema,
   SyncCursorModelSchema,
+  RouteCacheModelSchema,
 ];
 
 /// Opens the app's single Isar instance backed by [isarSchemas] at

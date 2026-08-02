@@ -16,10 +16,10 @@ void main() {
       isar = await openTestIsar();
 
       expect(isar.isOpen, isTrue);
-      // OrderModelSchema + SyncCursorModelSchema are currently the only
-      // registered collections — update this count as more feature schemas
-      // are added.
-      expect(isarSchemas, hasLength(2));
+      // OrderModelSchema + SyncCursorModelSchema + RouteCacheModelSchema
+      // (PR7 — offline route cache) are currently the registered
+      // collections — update this count as more feature schemas are added.
+      expect(isarSchemas, hasLength(3));
     });
   });
 }
