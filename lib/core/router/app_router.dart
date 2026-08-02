@@ -6,6 +6,7 @@ import '../../features/auth/domain/app_session.dart';
 import '../../features/auth/presentation/providers.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/delivery/presentation/screens/cadete_orders_screen.dart';
+import '../../features/delivery/presentation/screens/navigation_map_screen.dart';
 import '../../features/orders/presentation/providers.dart';
 import '../../features/orders/presentation/screens/order_detail_screen.dart';
 import '../../features/orders/presentation/screens/order_form_screen.dart';
@@ -90,6 +91,14 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
               orderId: state.pathParameters['id']!,
               readOnlyForCadete: true,
             ),
+            routes: [
+              GoRoute(
+                path: 'navigate',
+                name: 'delivery-order-navigate',
+                builder: (context, state) =>
+                    NavigationMapScreen(orderId: state.pathParameters['id']!),
+              ),
+            ],
           ),
         ],
       ),

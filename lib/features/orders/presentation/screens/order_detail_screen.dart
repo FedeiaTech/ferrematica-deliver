@@ -25,8 +25,14 @@ import '../widgets/sync_status_chip.dart';
 /// pedido", and "Eliminar". "Marcar entregado" stays visible even in
 /// cadete mode — per spec's `cadete-orders`/`order-management` domains the
 /// assigned cadete is the one who closes out `en_camino → entregado`
-/// through this same flow. Starting `asignado → en_camino` is a separate
-/// action added in PR6 (navigation screen), out of this PR's scope.
+/// through this same flow.
+///
+/// **PR6**: two cadete-only navigation actions. "Iniciar navegación" shows
+/// while `status == asignado` — it calls `OrdersController.startDelivery`
+/// (the `asignado → en_camino` transition, per spec's "Cadete starts
+/// delivery" scenario) and then pushes `NavigationMapScreen`. "Ver ruta"
+/// shows while `status == en_camino` — it only navigates, it never
+/// re-triggers the transition (the order is already `en_camino`).
 class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({
     required this.orderId,
@@ -81,6 +87,11 @@ class _OrderDetailBody extends ConsumerWidget {
     final canAssignCadete =
         !readOnlyForCadete &&
         (order.status == OrderStatus.pendiente || order.status == OrderStatus.asignado);
+    // Cadete-only navigation actions (PR6). "Iniciar navegación" triggers
+    // the asignado -> en_camino transition before opening the map;
+    // "Ver ruta" only reopens the map for an already en_camino order.
+    final canStartNavigation = readOnlyForCadete && order.status == OrderStatus.asignado;
+    final canViewRoute = readOnlyForCadete && order.status == OrderStatus.enCamino;
     final statusColor = orderStatusColor(order.status);
 
     return ListView(
@@ -143,6 +154,18 @@ class _OrderDetailBody extends ConsumerWidget {
                 onPressed: () => context.push('/orders/${order.id}/edit'),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar'),
+              ),
+            if (canStartNavigation)
+              FilledButton.icon(
+                onPressed: () => _startNavigation(context, ref, order),
+                icon: const Icon(Icons.navigation_outlined),
+                label: const Text('Iniciar navegación'),
+              ),
+            if (canViewRoute)
+              OutlinedButton.icon(
+                onPressed: () => context.push('/delivery/${order.id}/navigate'),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Ver ruta'),
               ),
             if (canDeliver)
               FilledButton.icon(
@@ -217,6 +240,24 @@ class _OrderDetailBody extends ConsumerWidget {
     await ref
         .read(ordersControllerProvider.notifier)
         .markDelivered(order, paymentStatus: paymentStatus);
+  }
+
+  /// Triggers the `asignado -> en_camino` transition, then pushes the map
+  /// screen — per spec's "Cadete starts delivery" scenario, only the
+  /// assigned cadete reaches this button (`readOnlyForCadete`-gated).
+  /// Navigates regardless of whether the save round-trips instantly; the
+  /// map screen itself re-reads the order reactively via
+  /// `orderByIdProvider`, so it reflects the now-`en_camino` status as soon
+  /// as it lands.
+  Future<void> _startNavigation(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    await ref.read(ordersControllerProvider.notifier).startDelivery(order);
+    if (context.mounted) {
+      context.push('/delivery/${order.id}/navigate');
+    }
   }
 
   Future<void> _openAssignCadeteSheet(
