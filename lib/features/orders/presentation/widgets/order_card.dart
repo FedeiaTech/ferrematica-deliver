@@ -27,16 +27,41 @@ class OrderCard extends StatelessWidget {
             backgroundColor: statusColor.withValues(alpha: 0.15),
             child: Icon(orderStatusIcon(order.status), color: statusColor),
           ),
-          title: Text(order.deliveryAddress),
-          subtitle: Text(
-            orderStatusLabel(order.status),
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+          isThreeLine: true,
+          title: Text(
+            order.deliveryAddress,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          trailing: Wrap(
-            spacing: 4,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (order.isIncomplete) const IncompleteBadge(),
-              SyncStatusChip(status: order.syncStatus),
+              const SizedBox(height: 4),
+              Text(
+                orderStatusLabel(order.status),
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  if (order.needsPaymentFollowUp)
+                    Tooltip(
+                      message: 'Cobro pendiente',
+                      child: Icon(
+                        Icons.money_off_outlined,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  if (order.isIncomplete) const IncompleteBadge(),
+                  SyncStatusChip(status: order.syncStatus),
+                ],
+              ),
             ],
           ),
         ),
