@@ -46,7 +46,7 @@ void main() {
 
     await boot(tester, authRepository);
 
-    expect(find.text('Pedidos'), findsOneWidget);
+    expect(find.text('Todos'), findsOneWidget);
   });
 
   testWidgets('authenticated cadete is redirected to /delivery', (tester) async {
@@ -57,7 +57,7 @@ void main() {
 
     await boot(tester, authRepository);
 
-    expect(find.text('Mis entregas'), findsOneWidget);
+    expect(find.text('Todavía no tenés pedidos asignados.'), findsOneWidget);
   });
 
   testWidgets('signing out from /delivery redirects back to /login', (tester) async {
@@ -67,7 +67,7 @@ void main() {
     addTearDown(authRepository.dispose);
 
     await boot(tester, authRepository);
-    expect(find.text('Mis entregas'), findsOneWidget);
+    expect(find.text('Todavía no tenés pedidos asignados.'), findsOneWidget);
 
     authRepository.setSession(null);
     await tester.pumpAndSettle();
@@ -84,7 +84,7 @@ void main() {
       addTearDown(authRepository.dispose);
 
       await boot(tester, authRepository);
-      expect(find.text('Mis entregas'), findsOneWidget);
+      expect(find.text('Todavía no tenés pedidos asignados.'), findsOneWidget);
 
       final context = tester.element(find.byType(Scaffold).first);
       GoRouter.of(context).go('/orders');
@@ -92,8 +92,8 @@ void main() {
 
       // Defense-in-depth (PR4): the router guard blocks a cadete from
       // `/orders/*` entirely, not just from the dueño-only action buttons.
-      expect(find.text('Mis entregas'), findsOneWidget);
-      expect(find.text('Pedidos'), findsNothing);
+      expect(find.text('Todavía no tenés pedidos asignados.'), findsOneWidget);
+      expect(find.text('Todos'), findsNothing);
     },
   );
 
@@ -106,14 +106,14 @@ void main() {
       addTearDown(authRepository.dispose);
 
       await boot(tester, authRepository);
-      expect(find.text('Pedidos'), findsOneWidget);
+      expect(find.text('Todos'), findsOneWidget);
 
       final context = tester.element(find.byType(Scaffold).first);
       GoRouter.of(context).go('/delivery');
       await tester.pumpAndSettle();
 
-      expect(find.text('Pedidos'), findsOneWidget);
-      expect(find.text('Mis entregas'), findsNothing);
+      expect(find.text('Todos'), findsOneWidget);
+      expect(find.text('Todavía no tenés pedidos asignados.'), findsNothing);
     },
   );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/last_email_store.dart';
 import '../providers.dart';
 
 /// Shared email/password sign-in form for both `dueño` and `cadete` roles —
@@ -19,6 +20,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    LastEmailStore.read().then((email) {
+      if (email != null && mounted) setState(() => _emailController.text = email);
+    });
+  }
 
   @override
   void dispose() {

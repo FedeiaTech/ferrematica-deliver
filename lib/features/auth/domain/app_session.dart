@@ -18,6 +18,16 @@ extension UserRoleParsing on UserRole {
   };
 }
 
+/// Human-readable role label shown in the app's UI chrome (home screen
+/// shells) — "Admin" for `dueno` rather than "Dueño", per the dueño's own
+/// naming preference for how their role is displayed.
+extension UserRoleLabel on UserRole {
+  String get label => switch (this) {
+    UserRole.dueno => 'Admin',
+    UserRole.cadete => 'Cadete',
+  };
+}
+
 /// The authenticated user's id (matches `auth.users.id` / `profiles.id`)
 /// and resolved [rol]. This is the single source of truth the router guard
 /// and order-creation flow read from (design decision #1).

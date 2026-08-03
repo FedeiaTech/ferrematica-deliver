@@ -5,12 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/domain/app_session.dart';
 import '../../features/auth/presentation/providers.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
-import '../../features/delivery/presentation/screens/cadete_orders_screen.dart';
+import '../../features/delivery/presentation/screens/cadete_home_screen.dart';
 import '../../features/delivery/presentation/screens/navigation_map_screen.dart';
+import '../../features/orders/domain/order.dart';
 import '../../features/orders/presentation/providers.dart';
+import '../../features/orders/presentation/screens/dueno_home_screen.dart';
 import '../../features/orders/presentation/screens/order_detail_screen.dart';
 import '../../features/orders/presentation/screens/order_form_screen.dart';
-import '../../features/orders/presentation/screens/orders_list_screen.dart';
+import '../../features/orders/presentation/screens/orders_map_screen.dart';
 
 /// App-wide router. `/orders` and its children are the dueño-facing
 /// `pedidos` feature's entry point; `/delivery` and its children are the
@@ -82,7 +84,7 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/delivery',
         name: 'delivery',
-        builder: (context, state) => const CadeteOrdersScreen(),
+        builder: (context, state) => const CadeteHomeScreen(),
         routes: [
           GoRoute(
             path: ':id',
@@ -105,18 +107,40 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/orders',
         name: 'orders',
-        builder: (context, state) => const OrdersListScreen(),
+        builder: (context, state) => const DuenoHomeScreen(),
         routes: [
           GoRoute(
             path: 'new',
             name: 'order-new',
-            builder: (context, state) => const OrderFormScreen(),
+            // `extra` carries the failed order for "Reintentar entrega"
+            // (order_detail_screen.dart) — `null` for the normal "+" FAB
+            // create flow.
+            builder: (context, state) =>
+                OrderFormScreen(prefillFrom: state.extra as Order?),
+          ),
+          GoRoute(
+            path: 'map',
+            name: 'orders-map',
+            builder: (context, state) => const OrdersMapScreen(),
           ),
           GoRoute(
             path: ':id',
             name: 'order-detail',
             builder: (context, state) =>
                 OrderDetailScreen(orderId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'navigate',
+                name: 'order-navigate',
+                // Dueño-facing route to the same map screen the cadete
+                // uses, reachable only when the dueño self-assigned the
+                // order to themselves ("Base" in assign_cadete_sheet.dart)
+                // — OrderDetailScreen only renders the button that leads
+                // here in that case.
+                builder: (context, state) =>
+                    NavigationMapScreen(orderId: state.pathParameters['id']!),
+              ),
+            ],
           ),
           GoRoute(
             path: ':id/edit',

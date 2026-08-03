@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:riverpod/misc.dart' show Override;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'fake_auth_repository.dart';
@@ -83,6 +84,10 @@ Future<void> pumpApp(
   List<Override> overrides = const <Override>[],
   AuthRepository? authRepository,
 }) async {
+  // LoginScreen/LoginController touch SharedPreferences (LastEmailStore) —
+  // without this, its platform channel calls throw in the test environment.
+  SharedPreferences.setMockInitialValues({});
+
   final isar = await tester.runAsync(openTestIsar);
   if (isar == null) {
     throw StateError('tester.runAsync returned null while opening test Isar');

@@ -24,7 +24,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Pedidos'), findsOneWidget);
+    expect(find.text('Todos'), findsOneWidget);
     expect(find.text('Todavía no hay pedidos.'), findsOneWidget);
   });
 }

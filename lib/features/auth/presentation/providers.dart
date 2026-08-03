@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/last_email_store.dart';
 import '../data/providers.dart';
 import '../domain/app_session.dart';
 import '../domain/cadete_directory.dart';
@@ -29,6 +32,7 @@ class LoginController extends Notifier<AsyncValue<void>> {
     state = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).signIn(email: email, password: password),
     );
+    if (!state.hasError) unawaited(LastEmailStore.save(email));
   }
 }
 
