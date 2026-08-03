@@ -36,4 +36,12 @@ abstract interface class GeocodingClient {
   /// Attempts to resolve [address] to coordinates. Returns `null` on any
   /// failure (never throws).
   Future<GeocodeResult?> geocode(String address);
+
+  /// Attempts to resolve a human-readable city/town name for
+  /// ([latitude], [longitude]) — reverse geocoding, used to show the
+  /// dueño the actual delivery city derived from the resolved pin, rather
+  /// than the transient city hint used to disambiguate the forward
+  /// geocoding search. Returns `null` on any failure or when no city-level
+  /// locality could be resolved (never throws).
+  Future<String?> reverseGeocodeCity(double latitude, double longitude);
 }

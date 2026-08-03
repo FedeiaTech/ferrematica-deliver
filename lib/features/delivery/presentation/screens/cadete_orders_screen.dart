@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../auth/data/providers.dart';
 import '../../../orders/presentation/widgets/order_card.dart';
 import '../providers.dart';
 
@@ -12,6 +11,10 @@ import '../providers.dart';
 /// read-only cadete detail route (`/delivery/:id`), which reuses
 /// [OrderDetailScreen] with `readOnlyForCadete: true` (design decision #8)
 /// rather than forking a separate detail screen.
+///
+/// No `AppBar` here — the section title lives in `CadeteHomeScreen`'s
+/// `SectionBanner`, and signing out now lives in that banner's role-label
+/// menu instead of a per-tab action.
 class CadeteOrdersScreen extends ConsumerWidget {
   const CadeteOrdersScreen({super.key});
 
@@ -20,16 +23,6 @@ class CadeteOrdersScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(cadeteOrdersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mis entregas'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Cerrar sesión',
-            onPressed: () => ref.read(authRepositoryProvider).signOut(),
-          ),
-        ],
-      ),
       body: ordersAsync.when(
         data: (orders) {
           if (orders.isEmpty) {

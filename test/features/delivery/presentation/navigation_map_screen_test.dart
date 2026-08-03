@@ -356,6 +356,16 @@ class _FakeLocationClient implements LocationClient {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     return location;
   }
+
+  @override
+  Future<bool> isServiceEnabled() async => true;
+
+  @override
+  Future<void> openLocationSettings() async {}
+
+  @override
+  Stream<DeviceLocation> watchPosition() =>
+      location == null ? const Stream.empty() : Stream.value(location!);
 }
 
 class _FakeDirectionsClient implements DirectionsClient {

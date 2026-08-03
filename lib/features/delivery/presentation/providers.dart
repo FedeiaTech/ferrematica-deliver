@@ -36,6 +36,38 @@ final Provider<AsyncValue<List<Order>>> cadeteOrdersProvider =
       );
     });
 
+/// The device's current position, fetched once and shared by every
+/// [OrderCard] in the dashboard list so each row can show its distance
+/// from here — a single `getCurrentLocation()` call per list render
+/// instead of one per card. `null` while unresolved (no permission, GPS
+/// off, or still loading); cards that need it simply don't show a
+/// distance in that case, same "degrade, don't block" pattern as the rest
+/// of this feature.
+final FutureProvider<DeviceLocation?> currentDeviceLocationProvider =
+    FutureProvider<DeviceLocation?>((ref) {
+      return ref.watch(locationClientProvider).getCurrentLocation();
+    });
+
+/// Live stream of the device's position while [NavigationMapScreen] is
+/// open — drives the "current location" marker and heading-up map
+/// rotation in real time, as opposed to [navigationRouteProvider]'s
+/// one-shot fix (which the Directions route request is keyed on, per
+/// design decision #10 — one request per screen open, not a live re-route
+/// on every tick).
+final StreamProvider<DeviceLocation> livePositionProvider = StreamProvider<DeviceLocation>((
+  ref,
+) {
+  return ref.watch(locationClientProvider).watchPosition();
+});
+
+/// Whether the device's location service (GPS) is currently on —
+/// [NavigationMapScreen] shows a banner prompting the user to enable it
+/// when this resolves `false`, instead of only silently degrading to a
+/// destination-marker-only view.
+final FutureProvider<bool> locationServiceEnabledProvider = FutureProvider<bool>((ref) {
+  return ref.watch(locationClientProvider).isServiceEnabled();
+});
+
 /// The destination coordinates a [navigationRouteProvider] request is keyed
 /// on. Value-equal so re-watching with the same order/coordinates never
 /// re-fires the Directions/location request (e.g. on an unrelated provider
