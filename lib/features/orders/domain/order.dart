@@ -70,6 +70,7 @@ final class Order {
     required this.updatedAt,
     this.latitude,
     this.longitude,
+    this.resolvedCity,
     this.clientName,
     this.clientPhone,
     this.notes,
@@ -82,6 +83,7 @@ final class Order {
     this.syncStatus = SyncStatus.pending,
     this.deliveredAt,
     this.deletedAt,
+    this.deliveryProblem,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
@@ -91,6 +93,12 @@ final class Order {
   final String deliveryAddress;
   final double? latitude;
   final double? longitude;
+  /// The delivery city, resolved by reverse-geocoding [latitude]/
+  /// [longitude] once they're known — the ground truth of where the pin
+  /// actually landed, not the city hint the dueño picked in the order form
+  /// to disambiguate the forward geocoding search (that hint is transient
+  /// form state, never persisted).
+  final String? resolvedCity;
   final String? clientName;
   final String? clientPhone;
   final String? notes;
@@ -106,6 +114,11 @@ final class Order {
   final DateTime updatedAt;
   final DateTime? deliveredAt;
   final DateTime? deletedAt;
+  /// Reason the assigned cadete (or dueño, for a self-delivery) couldn't
+  /// complete this delivery — set by [OrdersController.reportDeliveryProblem],
+  /// which also moves [status] to `cancelado`. `null` for every order that
+  /// hasn't had a delivery problem reported against it.
+  final String? deliveryProblem;
 
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
@@ -120,10 +133,18 @@ final class Order {
   /// [updatedAt] always advances to `DateTime.now()` (or [updatedAt] if
   /// explicitly provided) — callers must not silently leave a stale
   /// timestamp after a mutation, since LWW sync relies on it.
+  ///
+  /// Every nullable field here can only be *set* or *kept*, never cleared,
+  /// EXCEPT [latitude]/[longitude]/[resolvedCity] when [clearCoordinates]
+  /// is `true` — needed so a re-geocode that fails after an address edit
+  /// drops the OLD address's stale pin instead of silently leaving it
+  /// pointing at a place that no longer matches [deliveryAddress].
   Order copyWith({
     String? deliveryAddress,
     double? latitude,
     double? longitude,
+    String? resolvedCity,
+    bool clearCoordinates = false,
     String? clientName,
     String? clientPhone,
     String? notes,
@@ -137,6 +158,7 @@ final class Order {
     DateTime? updatedAt,
     DateTime? deliveredAt,
     DateTime? deletedAt,
+    String? deliveryProblem,
   }) {
     return Order(
       id: id,
@@ -144,8 +166,9 @@ final class Order {
       createdBy: createdBy,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      latitude: clearCoordinates ? null : (latitude ?? this.latitude),
+      longitude: clearCoordinates ? null : (longitude ?? this.longitude),
+      resolvedCity: clearCoordinates ? null : (resolvedCity ?? this.resolvedCity),
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
       notes: notes ?? this.notes,
@@ -158,6 +181,7 @@ final class Order {
       syncStatus: syncStatus ?? this.syncStatus,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      deliveryProblem: deliveryProblem ?? this.deliveryProblem,
     );
   }
 }

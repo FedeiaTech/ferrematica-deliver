@@ -62,51 +62,61 @@ const OrderModelSchema = CollectionSchema(
       name: r'deliveryAddress',
       type: IsarType.string,
     ),
-    r'id': PropertySchema(id: 9, name: r'id', type: IsarType.string),
+    r'deliveryProblem': PropertySchema(
+      id: 9,
+      name: r'deliveryProblem',
+      type: IsarType.string,
+    ),
+    r'id': PropertySchema(id: 10, name: r'id', type: IsarType.string),
     r'items': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'items',
       type: IsarType.objectList,
 
       target: r'OrderItemModel',
     ),
     r'latitude': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'latitude',
       type: IsarType.double,
     ),
     r'longitude': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'longitude',
       type: IsarType.double,
     ),
-    r'notes': PropertySchema(id: 13, name: r'notes', type: IsarType.string),
+    r'notes': PropertySchema(id: 14, name: r'notes', type: IsarType.string),
     r'paymentMethod': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'paymentMethod',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentMethodEnumValueMap,
     ),
     r'paymentStatus': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'paymentStatus',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentStatusEnumValueMap,
     ),
+    r'resolvedCity': PropertySchema(
+      id: 17,
+      name: r'resolvedCity',
+      type: IsarType.string,
+    ),
     r'status': PropertySchema(
-      id: 16,
+      id: 18,
       name: r'status',
       type: IsarType.byte,
       enumMap: _OrderModelstatusEnumValueMap,
     ),
     r'syncStatus': PropertySchema(
-      id: 17,
+      id: 19,
       name: r'syncStatus',
       type: IsarType.byte,
       enumMap: _OrderModelsyncStatusEnumValueMap,
     ),
     r'updatedAt': PropertySchema(
-      id: 18,
+      id: 20,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
@@ -206,6 +216,12 @@ int _orderModelEstimateSize(
   }
   bytesCount += 3 + object.createdBy.length * 3;
   bytesCount += 3 + object.deliveryAddress.length * 3;
+  {
+    final value = object.deliveryProblem;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.id.length * 3;
   bytesCount += 3 + object.items.length * 3;
   {
@@ -221,6 +237,12 @@ int _orderModelEstimateSize(
   }
   {
     final value = object.notes;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.resolvedCity;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -243,21 +265,23 @@ void _orderModelSerialize(
   writer.writeDateTime(offsets[6], object.deletedAt);
   writer.writeDateTime(offsets[7], object.deliveredAt);
   writer.writeString(offsets[8], object.deliveryAddress);
-  writer.writeString(offsets[9], object.id);
+  writer.writeString(offsets[9], object.deliveryProblem);
+  writer.writeString(offsets[10], object.id);
   writer.writeObjectList<OrderItemModel>(
-    offsets[10],
+    offsets[11],
     allOffsets,
     OrderItemModelSchema.serialize,
     object.items,
   );
-  writer.writeDouble(offsets[11], object.latitude);
-  writer.writeDouble(offsets[12], object.longitude);
-  writer.writeString(offsets[13], object.notes);
-  writer.writeByte(offsets[14], object.paymentMethod.index);
-  writer.writeByte(offsets[15], object.paymentStatus.index);
-  writer.writeByte(offsets[16], object.status.index);
-  writer.writeByte(offsets[17], object.syncStatus.index);
-  writer.writeDateTime(offsets[18], object.updatedAt);
+  writer.writeDouble(offsets[12], object.latitude);
+  writer.writeDouble(offsets[13], object.longitude);
+  writer.writeString(offsets[14], object.notes);
+  writer.writeByte(offsets[15], object.paymentMethod.index);
+  writer.writeByte(offsets[16], object.paymentStatus.index);
+  writer.writeString(offsets[17], object.resolvedCity);
+  writer.writeByte(offsets[18], object.status.index);
+  writer.writeByte(offsets[19], object.syncStatus.index);
+  writer.writeDateTime(offsets[20], object.updatedAt);
 }
 
 OrderModel _orderModelDeserialize(
@@ -276,35 +300,37 @@ OrderModel _orderModelDeserialize(
     deletedAt: reader.readDateTimeOrNull(offsets[6]),
     deliveredAt: reader.readDateTimeOrNull(offsets[7]),
     deliveryAddress: reader.readString(offsets[8]),
-    id: reader.readString(offsets[9]),
+    deliveryProblem: reader.readStringOrNull(offsets[9]),
+    id: reader.readString(offsets[10]),
     items:
         reader.readObjectList<OrderItemModel>(
-          offsets[10],
+          offsets[11],
           OrderItemModelSchema.deserialize,
           allOffsets,
           OrderItemModel(),
         ) ??
         const <OrderItemModel>[],
-    latitude: reader.readDoubleOrNull(offsets[11]),
-    longitude: reader.readDoubleOrNull(offsets[12]),
-    notes: reader.readStringOrNull(offsets[13]),
+    latitude: reader.readDoubleOrNull(offsets[12]),
+    longitude: reader.readDoubleOrNull(offsets[13]),
+    notes: reader.readStringOrNull(offsets[14]),
     paymentMethod:
         _OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
-          offsets[14],
+          offsets[15],
         )] ??
         PaymentMethod.sinDefinir,
     paymentStatus:
         _OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
-          offsets[15],
+          offsets[16],
         )] ??
         PaymentStatus.pendiente,
+    resolvedCity: reader.readStringOrNull(offsets[17]),
     status:
-        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[16])] ??
+        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[18])] ??
         OrderStatus.pendiente,
     syncStatus:
-        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[17])] ??
+        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[19])] ??
         SyncStatus.pending,
-    updatedAt: reader.readDateTime(offsets[18]),
+    updatedAt: reader.readDateTime(offsets[20]),
   );
   return object;
 }
@@ -335,8 +361,10 @@ P _orderModelDeserializeProp<P>(
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 10:
+      return (reader.readString(offset)) as P;
+    case 11:
       return (reader.readObjectList<OrderItemModel>(
                 offset,
                 OrderItemModelSchema.deserialize,
@@ -345,35 +373,37 @@ P _orderModelDeserializeProp<P>(
               ) ??
               const <OrderItemModel>[])
           as P;
-    case 11:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 12:
       return (reader.readDoubleOrNull(offset)) as P;
     case 13:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 14:
+      return (reader.readStringOrNull(offset)) as P;
+    case 15:
       return (_OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentMethod.sinDefinir)
           as P;
-    case 15:
+    case 16:
       return (_OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentStatus.pendiente)
           as P;
-    case 16:
+    case 17:
+      return (reader.readStringOrNull(offset)) as P;
+    case 18:
       return (_OrderModelstatusValueEnumMap[reader.readByteOrNull(offset)] ??
               OrderStatus.pendiente)
           as P;
-    case 17:
+    case 19:
       return (_OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               SyncStatus.pending)
           as P;
-    case 18:
+    case 20:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2029,6 +2059,165 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'deliveryProblem'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'deliveryProblem'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'deliveryProblem',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'deliveryProblem',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'deliveryProblem',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'deliveryProblem', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  deliveryProblemIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'deliveryProblem', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> idEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2744,6 +2933,165 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'resolvedCity'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'resolvedCity'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'resolvedCity',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'resolvedCity',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'resolvedCity',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'resolvedCity', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  resolvedCityIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'resolvedCity', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> statusEqualTo(
     OrderStatus value,
   ) {
@@ -3043,6 +3391,19 @@ extension OrderModelQuerySortBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByDeliveryProblem() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deliveryProblem', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByDeliveryProblemDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deliveryProblem', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -3112,6 +3473,18 @@ extension OrderModelQuerySortBy
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByPaymentStatusDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'paymentStatus', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByResolvedCity() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'resolvedCity', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByResolvedCityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'resolvedCity', Sort.desc);
     });
   }
 
@@ -3265,6 +3638,19 @@ extension OrderModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByDeliveryProblem() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deliveryProblem', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByDeliveryProblemDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deliveryProblem', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -3346,6 +3732,18 @@ extension OrderModelQuerySortThenBy
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByPaymentStatusDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'paymentStatus', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByResolvedCity() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'resolvedCity', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByResolvedCityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'resolvedCity', Sort.desc);
     });
   }
 
@@ -3458,6 +3856,17 @@ extension OrderModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByDeliveryProblem({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'deliveryProblem',
+        caseSensitive: caseSensitive,
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctById({
     bool caseSensitive = true,
   }) {
@@ -3495,6 +3904,14 @@ extension OrderModelQueryWhereDistinct
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByPaymentStatus() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'paymentStatus');
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByResolvedCity({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'resolvedCity', caseSensitive: caseSensitive);
     });
   }
 
@@ -3580,6 +3997,13 @@ extension OrderModelQueryProperty
     });
   }
 
+  QueryBuilder<OrderModel, String?, QQueryOperations>
+  deliveryProblemProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'deliveryProblem');
+    });
+  }
+
   QueryBuilder<OrderModel, String, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
@@ -3622,6 +4046,12 @@ extension OrderModelQueryProperty
   paymentStatusProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'paymentStatus');
+    });
+  }
+
+  QueryBuilder<OrderModel, String?, QQueryOperations> resolvedCityProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'resolvedCity');
     });
   }
 

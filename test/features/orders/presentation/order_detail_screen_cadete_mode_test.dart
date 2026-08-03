@@ -62,7 +62,7 @@ void main() {
   );
 
   testWidgets(
-    'readOnlyForCadete still shows "Marcar entregado" once en_camino',
+    'readOnlyForCadete still shows "Marcar entrega" once en_camino',
     (tester) async {
       final repository = FakeOrdersRepository(
         seed: [
@@ -86,9 +86,9 @@ void main() {
 
       // Per spec's order-management domain, the assigned cadete is the one
       // who closes en_camino -> entregado through this same flow.
-      expect(find.text('Marcar entregado'), findsOneWidget);
+      expect(find.text('Marcar entrega'), findsOneWidget);
 
-      await tester.tap(find.text('Marcar entregado'));
+      await tester.tap(find.text('Marcar entrega'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cobrado'));
       await tester.pumpAndSettle();

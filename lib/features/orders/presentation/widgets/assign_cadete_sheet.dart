@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/domain/cadete_directory.dart';
-import '../../../auth/presentation/providers.dart';
+import '../../../auth/presentation/providers.dart' show cadeteListProvider, sessionProvider;
 
 /// Dueño-facing picker listing every active `rol = 'cadete'` account
 /// (`profiles_select_cadetes` RLS policy, migration 0003), opened as a
@@ -40,9 +40,24 @@ class _AssignCadeteSheetContent extends ConsumerWidget {
               child: cadetesAsync.when(
                 data: (cadetes) {
                   if (cadetes.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                      child: Text('Todavía no hay cadetes disponibles.'),
+                    final session = ref.watch(sessionProvider).value;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Text('Todavía no hay cadetes disponibles.'),
+                          ),
+                          if (session != null)
+                            ListTile(
+                              leading: const Icon(Icons.storefront_outlined),
+                              title: const Text('Base'),
+                              onTap: () => Navigator.of(context).pop(session.userId),
+                            ),
+                        ],
+                      ),
                     );
                   }
                   return ListView.builder(

@@ -22,6 +22,7 @@ class OrderModel {
     required this.updatedAt,
     this.latitude,
     this.longitude,
+    this.resolvedCity,
     this.clientName,
     this.clientPhone,
     this.notes,
@@ -34,6 +35,7 @@ class OrderModel {
     this.syncStatus = SyncStatus.pending,
     this.deliveredAt,
     this.deletedAt,
+    this.deliveryProblem,
   });
 
   Id get isarId => fastHash(id);
@@ -44,6 +46,7 @@ class OrderModel {
   final String deliveryAddress;
   final double? latitude;
   final double? longitude;
+  final String? resolvedCity;
   final String? clientName;
   final String? clientPhone;
   final String? notes;
@@ -73,6 +76,7 @@ class OrderModel {
   final DateTime createdAt;
   final DateTime? deliveredAt;
   final DateTime? deletedAt;
+  final String? deliveryProblem;
 }
 
 /// Embedded line item — part of the [OrderModel] row itself, not a separate
@@ -96,6 +100,7 @@ OrderModel orderToModel(Order order) {
     updatedAt: order.updatedAt,
     latitude: order.latitude,
     longitude: order.longitude,
+    resolvedCity: order.resolvedCity,
     clientName: order.clientName,
     clientPhone: order.clientPhone,
     notes: order.notes,
@@ -115,6 +120,7 @@ OrderModel orderToModel(Order order) {
     syncStatus: order.syncStatus,
     deliveredAt: order.deliveredAt,
     deletedAt: order.deletedAt,
+    deliveryProblem: order.deliveryProblem,
   );
 }
 
@@ -128,6 +134,7 @@ Order orderModelToDomain(OrderModel model) {
     updatedAt: model.updatedAt,
     latitude: model.latitude,
     longitude: model.longitude,
+    resolvedCity: model.resolvedCity,
     clientName: model.clientName,
     clientPhone: model.clientPhone,
     notes: model.notes,
@@ -147,6 +154,7 @@ Order orderModelToDomain(OrderModel model) {
     syncStatus: model.syncStatus,
     deliveredAt: model.deliveredAt,
     deletedAt: model.deletedAt,
+    deliveryProblem: model.deliveryProblem,
   );
 }
 

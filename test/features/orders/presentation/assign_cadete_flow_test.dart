@@ -50,8 +50,9 @@ void main() {
       expect(saved!.assignedCadeteId, 'cadete-1');
       expect(saved.status, OrderStatus.asignado);
 
-      // The detail screen now shows the resolved name, and the action
-      // label switches to "Reasignar cadete" per pre-en_camino spec.
+      // The detail screen shows the resolved name in the "Cadete asignado"
+      // row; the status chip stays the plain "Asignado" word — and the
+      // action label switches to "Reasignar cadete" per pre-en_camino spec.
       expect(find.text('Cadete asignado'), findsOneWidget);
       expect(find.text('Juan Pérez'), findsOneWidget);
       expect(find.text('Reasignar cadete'), findsOneWidget);

@@ -61,6 +61,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'delivery_address': order.deliveryAddress,
     'latitude': order.latitude,
     'longitude': order.longitude,
+    'resolved_city': order.resolvedCity,
     'client_name': order.clientName,
     'client_phone': order.clientPhone,
     'notes': order.notes,
@@ -80,6 +81,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'updated_at': order.updatedAt.toUtc().toIso8601String(),
     'delivered_at': order.deliveredAt?.toUtc().toIso8601String(),
     'deleted_at': order.deletedAt?.toUtc().toIso8601String(),
+    'delivery_problem': order.deliveryProblem,
   };
 
   static Order _fromRow(Map<String, dynamic> row) => Order(
@@ -90,6 +92,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     updatedAt: DateTime.parse(row['updated_at'] as String),
     latitude: (row['latitude'] as num?)?.toDouble(),
     longitude: (row['longitude'] as num?)?.toDouble(),
+    resolvedCity: row['resolved_city'] as String?,
     clientName: row['client_name'] as String?,
     clientPhone: row['client_phone'] as String?,
     notes: row['notes'] as String?,
@@ -112,6 +115,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
         ? null
         : DateTime.parse(row['delivered_at'] as String),
     deletedAt: row['deleted_at'] == null ? null : DateTime.parse(row['deleted_at'] as String),
+    deliveryProblem: row['delivery_problem'] as String?,
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/

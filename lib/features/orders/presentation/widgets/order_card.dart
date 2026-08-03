@@ -1,21 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 
+import '../../../delivery/presentation/providers.dart'
+    show currentDeviceLocationProvider;
 import '../../domain/order.dart';
 import 'incomplete_badge.dart';
 import 'sync_status_chip.dart';
 
 /// A single row in [OrdersListScreen]. Tapping navigates to the order's
 /// detail view.
-class OrderCard extends StatelessWidget {
+class OrderCard extends ConsumerWidget {
   const OrderCard({required this.order, required this.onTap, super.key});
 
   final Order order;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final statusColor = orderStatusColor(order.status);
     final isCancelled = order.status == OrderStatus.cancelado;
+
+    final currentLocation = ref.watch(currentDeviceLocationProvider).value;
+    double? distanceKm;
+    if (currentLocation != null && order.latitude != null && order.longitude != null) {
+      distanceKm =
+          Geolocator.distanceBetween(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            order.latitude!,
+            order.longitude!,
+          ) /
+          1000;
+    }
+    final hasCityOrDistance = order.resolvedCity != null || distanceKm != null;
 
     return Opacity(
       opacity: isCancelled ? 0.6 : 1,
@@ -33,9 +51,51 @@ class OrderCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          trailing: order.amountToCharge != null
+              ? Text(
+                  '\$${order.amountToCharge!.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                )
+              : null,
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (hasCityOrDistance) ...[
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    if (distanceKm != null) ...[
+                      Icon(
+                        Icons.social_distance_outlined,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${distanceKm.toStringAsFixed(1)} km',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (distanceKm != null && order.resolvedCity != null)
+                      const SizedBox(width: 8),
+                    if (order.resolvedCity != null)
+                      Flexible(
+                        child: Text(
+                          order.resolvedCity!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 4),
               Text(
                 orderStatusLabel(order.status),

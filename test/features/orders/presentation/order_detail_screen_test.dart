@@ -26,19 +26,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Marcar entregado'));
+      await tester.tap(find.text('Marcar entrega'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Cobro pendiente'));
       await tester.pumpAndSettle();
 
-      // The transition MUST NOT be blocked by the pending payment.
+      // The transition MUST NOT be blocked by the pending payment. The
+      // dueño-facing payment-pending alert itself only shows on the
+      // dashboard (orders_list_screen.dart), not here — this screen just
+      // proves the non-blocking transition works.
       final saved = await repository.getById('order-1');
       expect(saved!.status, OrderStatus.entregado);
       expect(saved.paymentStatus, PaymentStatus.pendiente);
-
-      // The dueño-facing alert MUST be surfaced, non-blocking.
-      expect(find.text('1 pedido entregado con cobro pendiente'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

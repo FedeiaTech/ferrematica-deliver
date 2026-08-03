@@ -28,6 +28,9 @@ class _FakeGeocodingClient implements GeocodingClient {
     if (throws) throw StateError('geocoding blew up');
     return result;
   }
+
+  @override
+  Future<String?> reverseGeocodeCity(double latitude, double longitude) async => null;
 }
 
 void main() {

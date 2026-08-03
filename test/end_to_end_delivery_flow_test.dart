@@ -20,6 +20,9 @@ import 'helpers/pump_app.dart';
 class _FakeGeocodingClient implements GeocodingClient {
   @override
   Future<GeocodeResult?> geocode(String address) async => null;
+
+  @override
+  Future<String?> reverseGeocodeCity(double latitude, double longitude) async => null;
 }
 
 class _FakeLocationClient implements LocationClient {
@@ -28,6 +31,16 @@ class _FakeLocationClient implements LocationClient {
   @override
   Future<DeviceLocation?> getCurrentLocation() async =>
       const DeviceLocation(latitude: -34.61, longitude: -58.38);
+
+  @override
+  Future<bool> isServiceEnabled() async => true;
+
+  @override
+  Future<void> openLocationSettings() async {}
+
+  @override
+  Stream<DeviceLocation> watchPosition() =>
+      Stream.value(const DeviceLocation(latitude: -34.61, longitude: -58.38));
 }
 
 class _FakeDirectionsClient implements DirectionsClient {
@@ -75,8 +88,9 @@ void main() {
       final cadeteDirectory = FakeCadeteDirectory(
         cadetes: const [CadeteProfile(id: 'cadete-1', fullName: 'Juan Pérez')],
       );
+      const ownerId = 'owner-1';
       final authRepository = FakeAuthRepository(
-        initialSession: const AppSession(userId: 'owner-1', rol: UserRole.dueno),
+        initialSession: const AppSession(userId: ownerId, rol: UserRole.dueno),
       );
       addTearDown(authRepository.dispose);
 
@@ -96,7 +110,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // --- Dueño: create the order -------------------------------------
-      expect(find.text('Pedidos'), findsOneWidget);
+      expect(find.text('Todos'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.add));
       await tester.pumpAndSettle();
 
@@ -106,14 +120,19 @@ void main() {
       await tester.pumpAndSettle();
 
       final createdOrder = (await repository.pendingSync()).single;
-      expect(createdOrder.status, OrderStatus.pendiente);
+      // New orders auto-assign to the dueño themselves ("Base") — no
+      // cadete accounts exist by default — landing on `asignado`, not
+      // `en_camino`, so the dueño can still hand it off to a real cadete
+      // before heading out.
+      expect(createdOrder.status, OrderStatus.asignado);
+      expect(createdOrder.assignedCadeteId, ownerId);
 
-      // --- Dueño: assign the cadete --------------------------------------
+      // --- Dueño: reassign to a real cadete ------------------------------
       await tester.tap(find.text(createdOrder.deliveryAddress));
       await tester.pumpAndSettle();
 
-      expect(find.text('Asignar cadete'), findsOneWidget);
-      await tester.tap(find.text('Asignar cadete'));
+      expect(find.text('Reasignar cadete'), findsOneWidget);
+      await tester.tap(find.text('Reasignar cadete'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Juan Pérez'));
       await tester.pumpAndSettle();
@@ -128,7 +147,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Mis entregas'), findsOneWidget);
       expect(find.text(createdOrder.deliveryAddress), findsOneWidget);
 
       // --- Cadete: open the order, start navigation -----------------------
@@ -158,8 +176,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Ver ruta'), findsOneWidget);
-      expect(find.text('Marcar entregado'), findsOneWidget);
-      await tester.tap(find.text('Marcar entregado'));
+      expect(find.text('Marcar entrega'), findsOneWidget);
+      await tester.tap(find.text('Marcar entrega'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cobrado'));
       await tester.pumpAndSettle();

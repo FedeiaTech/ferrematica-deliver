@@ -27,9 +27,54 @@ const List<OrderStatus> _forwardLifecycle = <OrderStatus>[
   OrderStatus.entregado,
 ];
 
-/// Currently selected list filter. `null` means "show all statuses".
-final StateProvider<OrderStatus?> orderFilterProvider =
-    StateProvider<OrderStatus?>((ref) => null);
+/// Currently selected list filter — the set of statuses to show. Defaults
+/// to every status ("Todos"), so nothing is filtered out until the dueño
+/// deselects something from the status filter menu.
+final StateProvider<Set<OrderStatus>> orderFilterProvider = StateProvider<Set<OrderStatus>>(
+  (ref) => OrderStatus.values.toSet(),
+);
+
+/// Fire-and-forget backfill for `resolvedCity` on orders that already have
+/// coordinates but predate that field (or whose reverse-geocode attempt
+/// previously failed) — no-ops instantly if the order isn't missing it.
+/// `OrderDetailScreen` watches this once per `orderId`; Riverpod caches the
+/// family instance per key, so re-opening the same order's detail screen
+/// doesn't re-fire it once it succeeds (the saved order then has a
+/// non-null `resolvedCity` and the early return short-circuits).
+final resolvedCityBackfillProvider = FutureProvider.family<void, String>((
+  ref,
+  orderId,
+) async {
+  final repository = ref.read(ordersRepositoryProvider);
+  final order = await repository.getById(orderId);
+  if (order == null) return;
+  if (order.latitude == null || order.longitude == null) return;
+  if (order.resolvedCity != null) return;
+
+  final client = ref.read(geocodingClientProvider);
+  final city = await client.reverseGeocodeCity(order.latitude!, order.longitude!);
+  if (city == null) return;
+
+  final latest = await repository.getById(orderId) ?? order;
+  if (latest.resolvedCity != null) return;
+  await repository.save(latest.copyWith(resolvedCity: city, syncStatus: SyncStatus.pending));
+});
+
+/// Predefined cities used to disambiguate geocoding queries against
+/// same-named streets elsewhere in Argentina — e.g. "Candioti" exists in
+/// more than one place, and without a city hint Nominatim can return the
+/// wrong one. The order form appends the selected city to the address
+/// before it's sent to [GeocodingClient.geocode]. Seeded with the towns
+/// Ferrematica actually operates in; the dueño can add more from the form.
+final StateProvider<List<String>> geocodingCitiesProvider = StateProvider<List<String>>(
+  (ref) => const ['Santo Tomé, Santa Fe', 'Santa Fe, Santa Fe', 'Paraná, Entre Ríos'],
+);
+
+/// Currently selected city hint for the order form — defaults to Santo
+/// Tomé, where the dueño's business operates.
+final StateProvider<String> selectedGeocodingCityProvider = StateProvider<String>(
+  (ref) => 'Santo Tomé, Santa Fe',
+);
 
 /// Unfiltered, reactive stream of every non-deleted order. This is the
 /// single subscription the payment-pending banner and [orderByIdProvider]
@@ -49,9 +94,9 @@ final Provider<AsyncValue<List<Order>>> filteredOrdersProvider =
       final filter = ref.watch(orderFilterProvider);
       final ordersAsync = ref.watch(ordersStreamProvider);
       return ordersAsync.whenData((orders) {
-        if (filter == null) return orders;
+        if (filter.length == OrderStatus.values.length) return orders;
         return orders
-            .where((order) => order.status == filter)
+            .where((order) => filter.contains(order.status))
             .toList(growable: false);
       });
     });
@@ -97,8 +142,9 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     String? clientPhone,
     String? notes,
     double? amountToCharge,
-    PaymentMethod paymentMethod = PaymentMethod.sinDefinir,
+    PaymentMethod paymentMethod = PaymentMethod.efectivo,
     List<OrderItem> items = const <OrderItem>[],
+    String? cityHint,
   }) async {
     final session = ref.read(sessionProvider).value;
     if (session == null) {
@@ -122,23 +168,58 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     // Fire-and-forget (design decision #9): geocoding must never delay or
     // block order creation returning to the caller. Failure is swallowed
     // by [GeocodingClient] itself — see [_geocodeAndSave].
-    unawaited(_geocodeAndSave(order));
+    unawaited(_geocodeAndSave(order, cityHint: cityHint));
+    // Auto-assign every new order to the dueño themselves ("Base" in
+    // assign_cadete_sheet.dart) — this business has no cadete accounts
+    // yet, so defaulting to self-delivery means the order form's "Nuevo
+    // pedido" flow never leaves an order sitting unassigned needing an
+    // extra "Asignar cadete" tap; the detail screen already only offers
+    // "Reasignar cadete" once assignedCadeteId is set, so this is a pure
+    // default, not a dead-end — a real cadete can still take over later.
+    //
+    // Deliberately saved directly as `asignado`, NOT routed through
+    // [assignCadete] (whose self-delivery case jumps straight to
+    // `en_camino`) — that jump is meant for the dueño *actively* picking
+    // "Base" mid-flow to start delivering right now, not for this passive
+    // default at creation time. Jumping to `en_camino` here would hide
+    // "Reasignar cadete" immediately (only offered while
+    // pendiente/asignado), making a fresh order impossible to hand off to
+    // a real cadete before the dueño heads out.
+    await _repository.save(
+      order.copyWith(
+        assignedCadeteId: session.userId,
+        status: OrderStatus.asignado,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
   }
 
   /// Persists edits to an existing [order]. Callers pass the already
   /// `copyWith`-updated order; this bumps `syncStatus` back to `pending`
   /// implicitly via `copyWith`'s default in the domain model.
   ///
-  /// Re-geocodes only when `deliveryAddress` actually changed from the
+  /// Re-geocodes when `deliveryAddress` actually changed from the
   /// previously-persisted row (spec: "geocode ... on order creation or
   /// edit with a changed address"), so an unrelated edit (e.g. notes,
-  /// payment method) doesn't spend an unnecessary API call.
-  Future<void> updateOrder(Order order) async {
+  /// payment method) doesn't spend an unnecessary API call — or when
+  /// [forceRegeocode] is set, which the form passes when the dueño changed
+  /// the city selector (`_CitySelector` in `order_form_screen.dart`)
+  /// without touching the address text itself. The order doesn't persist
+  /// which city hint produced its current coordinates, so an unchanged
+  /// address can still need a fresh geocode if the disambiguating city
+  /// did change.
+  Future<void> updateOrder(
+    Order order, {
+    String? cityHint,
+    bool forceRegeocode = false,
+  }) async {
     final previous = await _repository.getById(order.id);
     final updated = order.copyWith(syncStatus: SyncStatus.pending);
     await _repository.save(updated);
-    if (previous == null || previous.deliveryAddress != updated.deliveryAddress) {
-      unawaited(_geocodeAndSave(updated));
+    if (forceRegeocode ||
+        previous == null ||
+        previous.deliveryAddress != updated.deliveryAddress) {
+      unawaited(_geocodeAndSave(updated, cityHint: cityHint));
     }
   }
 
@@ -150,16 +231,63 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// this ever runs, so any failure here (including an unexpected throw
   /// from a misbehaving [GeocodingClient] implementation) is caught and
   /// simply results in no follow-up save.
-  Future<void> _geocodeAndSave(Order order) async {
+  ///
+  /// A failed geocode explicitly CLEARS any previously-saved coordinates
+  /// (via `copyWith(clearCoordinates: true)`) rather than leaving them
+  /// untouched — otherwise an edit that changed the address to something
+  /// unresolvable would silently keep showing the OLD address's pin,
+  /// which now points at the wrong place. A fresh create has no previous
+  /// coordinates, so this is a no-op in that case.
+  /// Manually overrides [order]'s coordinates — the reliable fallback for
+  /// when geocoding gets it wrong (a common source of error: a street
+  /// corner without a house number, per `HttpGeocodingClient`'s
+  /// intersection approximation) via `location_picker_screen.dart`'s
+  /// tap-to-place map. Also re-attempts reverse geocoding the delivery
+  /// city for the corrected point, best-effort.
+  Future<void> setManualLocation(
+    Order order, {
+    required double latitude,
+    required double longitude,
+  }) async {
+    final client = ref.read(geocodingClientProvider);
+    final city = await client.reverseGeocodeCity(latitude, longitude);
+    final latest = await _repository.getById(order.id) ?? order;
+    await _repository.save(
+      latest.copyWith(
+        latitude: latitude,
+        longitude: longitude,
+        resolvedCity: city,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
+  Future<void> _geocodeAndSave(Order order, {String? cityHint}) async {
     try {
       final client = ref.read(geocodingClientProvider);
-      final result = await client.geocode(order.deliveryAddress);
-      if (result == null) return;
+      final query = cityHint == null || cityHint.trim().isEmpty
+          ? order.deliveryAddress
+          : '${order.deliveryAddress}, $cityHint';
+      final result = await client.geocode(query);
+      if (result == null) {
+        final latest = await _repository.getById(order.id) ?? order;
+        if (latest.latitude != null || latest.longitude != null) {
+          await _repository.save(
+            latest.copyWith(clearCoordinates: true, syncStatus: SyncStatus.pending),
+          );
+        }
+        return;
+      }
+      // Best-effort: the delivery city shown in order detail comes from
+      // reverse-geocoding the resolved pin itself, not the forward-search
+      // city hint — a failure here still leaves the coordinates saved.
+      final city = await client.reverseGeocodeCity(result.latitude, result.longitude);
       final latest = await _repository.getById(order.id) ?? order;
       await _repository.save(
         latest.copyWith(
           latitude: result.latitude,
           longitude: result.longitude,
+          resolvedCity: city,
           syncStatus: SyncStatus.pending,
         ),
       );
@@ -183,6 +311,23 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// Soft-deletes the order with [id].
   Future<void> deleteOrder(String id) async {
     await _repository.softDelete(id);
+  }
+
+  /// Records why a delivery couldn't be completed — shown next to "Marcar
+  /// entregado" for the same order (both the assigned cadete and a
+  /// self-delivery dueño). Moves the order to `cancelado`, same terminal
+  /// state as a dueño-initiated cancellation, since a failed delivery
+  /// isn't going to be retried automatically. Allowed from any
+  /// non-`cancelado` status, same guard as [cancelOrder].
+  Future<void> reportDeliveryProblem(Order order, {required String reason}) async {
+    if (order.status == OrderStatus.cancelado) return;
+    await _repository.save(
+      order.copyWith(
+        status: OrderStatus.cancelado,
+        deliveryProblem: reason,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
   }
 
   /// Marks [order] as `entregado`. [paymentStatus] MUST NOT block the
@@ -210,15 +355,22 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// (`assign_cadete_sheet.dart`) lands in PR3; this method only needs to
   /// exist and enforce the invariant so PR3 can wire it without touching
   /// this file again.
+  ///
+  /// Self-delivery ("Base" in assign_cadete_sheet.dart — `cadeteId` is the
+  /// dueño's own session id) skips `asignado` and lands straight on
+  /// `en_camino`: there's no separate person to hand the order off to, so
+  /// making the dueño tap a second "Iniciar navegación" button to start
+  /// navigating their own delivery is friction with no purpose.
   Future<void> assignCadete(Order order, String cadeteId) async {
     if (order.status != OrderStatus.pendiente &&
         order.status != OrderStatus.asignado) {
       return;
     }
+    final isSelfDelivery = ref.read(sessionProvider).value?.userId == cadeteId;
     await _repository.save(
       order.copyWith(
         assignedCadeteId: cadeteId,
-        status: OrderStatus.asignado,
+        status: isSelfDelivery ? OrderStatus.enCamino : OrderStatus.asignado,
         syncStatus: SyncStatus.pending,
       ),
     );
