@@ -2,23 +2,58 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../auth/domain/cadete_directory.dart' show CadeteProfile;
+import '../../../auth/presentation/providers.dart' show cadeteListProvider;
 import '../../../delivery/presentation/providers.dart'
     show currentDeviceLocationProvider;
 import '../../domain/order.dart';
+import '../providers.dart' show isOrderUnassigned;
 import 'incomplete_badge.dart';
 import 'sync_status_chip.dart';
 
 /// A single row in [OrdersListScreen]. Tapping navigates to the order's
 /// detail view.
 class OrderCard extends ConsumerWidget {
-  const OrderCard({required this.order, required this.onTap, super.key});
+  const OrderCard({
+    required this.order,
+    required this.onTap,
+    this.isFirst = false,
+    super.key,
+  });
 
   final Order order;
   final VoidCallback onTap;
 
+  /// Whether this is the first card in the list — drops the top margin so
+  /// it doesn't stack with the filter row's own bottom padding above it.
+  final bool isFirst;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final statusColor = orderStatusColor(order.status);
+    final cadetes = ref
+        .watch(cadeteListProvider)
+        .maybeWhen(data: (cadetes) => cadetes, orElse: () => const <CadeteProfile>[]);
+    final cadeteIds = cadetes.map((cadete) => cadete.id).toSet();
+    // "Asignado" only reflects a real cadete handoff. Every new order is
+    // auto-assigned to the dueño themselves at creation (see
+    // `OrdersController.createOrder`), so without this check every fresh
+    // order would misleadingly read "Asignado" despite sitting unclaimed —
+    // see user-reported correction 2026-08-03.
+    final isUnassigned = isOrderUnassigned(order, cadeteIds);
+    final String statusLabel;
+    final Color statusColor;
+    if (order.status == OrderStatus.asignado && isUnassigned) {
+      statusLabel = 'No asignado';
+      statusColor = Colors.grey.shade600;
+    } else if (order.status == OrderStatus.asignado) {
+      statusLabel = cadetes
+          .firstWhere((cadete) => cadete.id == order.assignedCadeteId)
+          .displayName;
+      statusColor = orderStatusColor(order.status);
+    } else {
+      statusLabel = orderStatusLabel(order.status);
+      statusColor = orderStatusColor(order.status);
+    }
     final isCancelled = order.status == OrderStatus.cancelado;
 
     final currentLocation = ref.watch(currentDeviceLocationProvider).value;
@@ -38,7 +73,7 @@ class OrderCard extends ConsumerWidget {
     return Opacity(
       opacity: isCancelled ? 0.6 : 1,
       child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        margin: EdgeInsets.fromLTRB(12, isFirst ? 0 : 6, 12, 6),
         child: ListTile(
           onTap: onTap,
           leading: CircleAvatar(
@@ -98,7 +133,7 @@ class OrderCard extends ConsumerWidget {
               ],
               const SizedBox(height: 4),
               Text(
-                orderStatusLabel(order.status),
+                statusLabel,
                 style: TextStyle(
                   color: statusColor,
                   fontWeight: FontWeight.w600,

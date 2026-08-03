@@ -34,6 +34,24 @@ final StateProvider<Set<OrderStatus>> orderFilterProvider = StateProvider<Set<Or
   (ref) => OrderStatus.values.toSet(),
 );
 
+/// Extra toggle in the status filter menu, independent of [orderFilterProvider]:
+/// when `true`, only orders [isOrderUnassigned] applies to are shown. Every
+/// new order is auto-assigned to the dueño at creation (see `createOrder`
+/// below), so `asignado` alone can't tell "actually handed to a cadete"
+/// apart from "still sitting on the dueño's own plate" — this toggle
+/// surfaces the latter.
+final StateProvider<bool> orderShowOnlyUnassignedProvider = StateProvider<bool>(
+  (ref) => false,
+);
+
+/// True when [order] is `asignado` but [cadeteIds] (the real cadete roster,
+/// from [cadeteListProvider]) doesn't contain its `assignedCadeteId` — i.e.
+/// it's still on the dueño's default self-assignment from `createOrder`,
+/// not actually handed off to a cadete.
+bool isOrderUnassigned(Order order, Set<String> cadeteIds) =>
+    order.status == OrderStatus.asignado &&
+    !cadeteIds.contains(order.assignedCadeteId);
+
 /// Fire-and-forget backfill for `resolvedCity` on orders that already have
 /// coordinates but predate that field (or whose reverse-geocode attempt
 /// previously failed) — no-ops instantly if the order isn't missing it.
@@ -92,12 +110,23 @@ final StreamProvider<List<Order>> ordersStreamProvider =
 final Provider<AsyncValue<List<Order>>> filteredOrdersProvider =
     Provider<AsyncValue<List<Order>>>((ref) {
       final filter = ref.watch(orderFilterProvider);
+      final onlyUnassigned = ref.watch(orderShowOnlyUnassignedProvider);
       final ordersAsync = ref.watch(ordersStreamProvider);
+      final cadeteIds = ref
+          .watch(cadeteListProvider)
+          .maybeWhen(
+            data: (cadetes) => cadetes.map((cadete) => cadete.id).toSet(),
+            orElse: () => const <String>{},
+          );
       return ordersAsync.whenData((orders) {
-        if (filter.length == OrderStatus.values.length) return orders;
-        return orders
-            .where((order) => filter.contains(order.status))
-            .toList(growable: false);
+        Iterable<Order> result = orders;
+        if (filter.length != OrderStatus.values.length) {
+          result = result.where((order) => filter.contains(order.status));
+        }
+        if (onlyUnassigned) {
+          result = result.where((order) => isOrderUnassigned(order, cadeteIds));
+        }
+        return result.toList(growable: false);
       });
     });
 
@@ -371,6 +400,24 @@ class OrdersController extends Notifier<AsyncValue<void>> {
       order.copyWith(
         assignedCadeteId: cadeteId,
         status: isSelfDelivery ? OrderStatus.enCamino : OrderStatus.asignado,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
+  /// Reverses [assignCadete]: clears whoever (or "Base", the dueño's own
+  /// self-delivery default from [createOrder]) is on the hook for [order]
+  /// and sends it back to `pendiente`. Only valid from `asignado` — same
+  /// restriction as [assignCadete] itself, since once `en_camino` the
+  /// cadete may already be en route. Covers the case a dueño flagged: a
+  /// pedido that turns out nobody should deliver (yet) needs a way out of
+  /// the auto-assigned "Base" default besides picking another cadete.
+  Future<void> unassignCadete(Order order) async {
+    if (order.status != OrderStatus.asignado) return;
+    await _repository.save(
+      order.copyWith(
+        status: OrderStatus.pendiente,
+        clearAssignedCadeteId: true,
         syncStatus: SyncStatus.pending,
       ),
     );

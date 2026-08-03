@@ -435,11 +435,17 @@ class _OrderDetailBody extends ConsumerWidget {
     WidgetRef ref,
     Order order,
   ) async {
-    final cadeteId = await showAssignCadeteSheet(context);
-    if (cadeteId == null) return;
-    await ref
-        .read(ordersControllerProvider.notifier)
-        .assignCadete(order, cadeteId);
+    final result = await showAssignCadeteSheet(
+      context,
+      allowUnassign: order.status == OrderStatus.asignado,
+    );
+    if (result == null) return;
+    final controller = ref.read(ordersControllerProvider.notifier);
+    if (result == kUnassignCadeteSentinel) {
+      await controller.unassignCadete(order);
+    } else {
+      await controller.assignCadete(order, result);
+    }
   }
 
   /// Fallback center for the manual location picker when the order has no

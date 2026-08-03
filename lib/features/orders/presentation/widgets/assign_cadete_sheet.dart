@@ -9,18 +9,32 @@ import '../../../auth/presentation/providers.dart' show cadeteListProvider, sess
 /// modal bottom sheet from `OrderDetailScreen`'s "Asignar cadete" action —
 /// same interaction shape as the existing "Marcar entregado" sheet.
 ///
-/// Returns the selected [CadeteProfile.id], or `null` if the sheet was
-/// dismissed without a selection.
-Future<String?> showAssignCadeteSheet(BuildContext context) {
+/// Sentinel returned by [showAssignCadeteSheet] when the dueño picks
+/// "Quitar asignación" instead of a cadete — distinguishable from a real
+/// [CadeteProfile.id]/session id, which are always UUIDs.
+const String kUnassignCadeteSentinel = '__unassign__';
+
+/// Returns the selected [CadeteProfile.id], [kUnassignCadeteSentinel] if the
+/// dueño chose to unassign instead, or `null` if the sheet was dismissed
+/// without a selection.
+Future<String?> showAssignCadeteSheet(
+  BuildContext context, {
+  bool allowUnassign = false,
+}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
-    builder: (sheetContext) => const _AssignCadeteSheetContent(),
+    builder: (sheetContext) => _AssignCadeteSheetContent(allowUnassign: allowUnassign),
   );
 }
 
 class _AssignCadeteSheetContent extends ConsumerWidget {
-  const _AssignCadeteSheetContent();
+  const _AssignCadeteSheetContent({required this.allowUnassign});
+
+  /// Shown only when the order is currently `asignado` — mirrors
+  /// [OrdersController.unassignCadete]'s own guard, so this option never
+  /// appears for an order it wouldn't actually apply to.
+  final bool allowUnassign;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +50,15 @@ class _AssignCadeteSheetContent extends ConsumerWidget {
               padding: EdgeInsets.all(16),
               child: Text('¿A qué cadete asignás este pedido?'),
             ),
+            if (allowUnassign) ...[
+              ListTile(
+                leading: const Icon(Icons.remove_circle_outline),
+                title: const Text('Quitar asignación'),
+                subtitle: const Text('Vuelve a pendiente, sin nadie a cargo'),
+                onTap: () => Navigator.of(context).pop(kUnassignCadeteSentinel),
+              ),
+              const Divider(height: 1),
+            ],
             Flexible(
               child: cadetesAsync.when(
                 data: (cadetes) {

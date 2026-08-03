@@ -136,9 +136,12 @@ final class Order {
   ///
   /// Every nullable field here can only be *set* or *kept*, never cleared,
   /// EXCEPT [latitude]/[longitude]/[resolvedCity] when [clearCoordinates]
-  /// is `true` — needed so a re-geocode that fails after an address edit
+  /// is `true` (needed so a re-geocode that fails after an address edit
   /// drops the OLD address's stale pin instead of silently leaving it
-  /// pointing at a place that no longer matches [deliveryAddress].
+  /// pointing at a place that no longer matches [deliveryAddress]) and
+  /// [assignedCadeteId] when [clearAssignedCadeteId] is `true` (needed for
+  /// [OrdersController.unassignCadete] to send an order back to `pendiente`
+  /// with no one on the hook for it).
   Order copyWith({
     String? deliveryAddress,
     double? latitude,
@@ -149,6 +152,7 @@ final class Order {
     String? clientPhone,
     String? notes,
     String? assignedCadeteId,
+    bool clearAssignedCadeteId = false,
     double? amountToCharge,
     PaymentMethod? paymentMethod,
     PaymentStatus? paymentStatus,
@@ -172,7 +176,9 @@ final class Order {
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
       notes: notes ?? this.notes,
-      assignedCadeteId: assignedCadeteId ?? this.assignedCadeteId,
+      assignedCadeteId: clearAssignedCadeteId
+          ? null
+          : (assignedCadeteId ?? this.assignedCadeteId),
       amountToCharge: amountToCharge ?? this.amountToCharge,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentStatus: paymentStatus ?? this.paymentStatus,

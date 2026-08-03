@@ -18,6 +18,7 @@ class OrdersListScreen extends ConsumerWidget {
     final filteredAsync = ref.watch(filteredOrdersProvider);
     final allOrdersAsync = ref.watch(ordersStreamProvider);
     final filter = ref.watch(orderFilterProvider);
+    final onlyUnassigned = ref.watch(orderShowOnlyUnassignedProvider);
 
     return Scaffold(
       // No AppBar here — the section title and the map button both live
@@ -35,7 +36,10 @@ class OrdersListScreen extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Align(alignment: Alignment.centerLeft, child: _StatusFilterMenu(selected: filter)),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _StatusFilterMenu(selected: filter, onlyUnassigned: onlyUnassigned),
+            ),
           ),
           Expanded(
             child: filteredAsync.when(
@@ -49,6 +53,7 @@ class OrdersListScreen extends ConsumerWidget {
                     final order = orders[index];
                     return OrderCard(
                       order: order,
+                      isFirst: index == 0,
                       onTap: () => context.push('/orders/${order.id}'),
                     );
                   },
@@ -71,15 +76,23 @@ class OrdersListScreen extends ConsumerWidget {
 /// previous single-select filter chips — the dueño can now show e.g.
 /// "Pendiente" and "Asignado" together instead of one status at a time.
 class _StatusFilterMenu extends ConsumerWidget {
-  const _StatusFilterMenu({required this.selected});
+  const _StatusFilterMenu({required this.selected, required this.onlyUnassigned});
 
   final Set<OrderStatus> selected;
 
+  /// Mirrors [orderShowOnlyUnassignedProvider] — an extra AND-filter on top
+  /// of [selected], not one of the [OrderStatus] values.
+  final bool onlyUnassigned;
+
   String get _buttonLabel {
-    if (selected.length == OrderStatus.values.length) return 'Todos';
-    if (selected.isEmpty) return 'Ninguno';
-    if (selected.length == 1) return orderStatusLabel(selected.first);
-    return '${selected.length} seleccionados';
+    final statusPart = selected.length == OrderStatus.values.length
+        ? 'Todos'
+        : selected.isEmpty
+        ? 'Ninguno'
+        : selected.length == 1
+        ? orderStatusLabel(selected.first)
+        : '${selected.length} seleccionados';
+    return onlyUnassigned ? '$statusPart · No asignados' : statusPart;
   }
 
   @override
@@ -126,6 +139,14 @@ class _StatusFilterMenu extends ConsumerWidget {
             closeOnActivate: false,
             child: Text(orderStatusLabel(status)),
           ),
+        const Divider(height: 1),
+        CheckboxMenuButton(
+          value: onlyUnassigned,
+          onChanged: (checked) =>
+              ref.read(orderShowOnlyUnassignedProvider.notifier).state = checked ?? false,
+          closeOnActivate: false,
+          child: const Text('No asignados'),
+        ),
       ],
     );
   }
