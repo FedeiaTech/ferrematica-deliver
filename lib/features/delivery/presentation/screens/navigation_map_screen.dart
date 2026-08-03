@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:latlong2/latlong.dart' as latlong;
@@ -100,8 +103,71 @@ class _NavigationMapBody extends ConsumerStatefulWidget {
   ConsumerState<_NavigationMapBody> createState() => _NavigationMapBodyState();
 }
 
-class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
-  final MapController _mapController = MapController();
+class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody>
+    with TickerProviderStateMixin {
+  /// Wraps a plain [MapController] so every programmatic camera change
+  /// (recenter, rotation) glides instead of snapping — flutter_map itself
+  /// has no animation of its own. Default duration/curve cover the
+  /// deliberate recenter action; continuous live-tracking calls
+  /// ([_onLivePosition]) pass their own shorter duration so they don't
+  /// lag behind a cadete actually moving. `cancelPreviousAnimations: true`
+  /// so a fresh GPS ping interrupts (rather than queues behind) whatever
+  /// animation the previous ping started.
+  late final AnimatedMapController _animatedMapController = AnimatedMapController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+    curve: Curves.easeInOutCubic,
+    cancelPreviousAnimations: true,
+  );
+
+  MapController get _mapController => _animatedMapController.mapController;
+
+  /// Duration for camera changes driven by a fresh live GPS position —
+  /// shorter than the default so continuous tracking feels like gliding
+  /// alongside the cadete, not chasing them.
+  static const Duration _liveTrackingDuration = Duration(milliseconds: 400);
+
+  /// Zoom [_applyCameraPose] snaps heading-up back to — "roughly a 5-block
+  /// radius", per the dueño's own feedback on `_buildFlutterMap`'s matching
+  /// `initialZoom`. North-up doesn't use this: it fits the whole route
+  /// instead of zooming to a fixed radius.
+  static const double _fiveBlockZoom = 17;
+
+  /// Fires 10s after the camera stops following the live position (the
+  /// cadete panned/pinched away) and snaps back — "útil para cuando se
+  /// maneja y se perdió el centramiento": driving means no free hand to
+  /// tap the manual recenter button. Reset on every further pan so an
+  /// actively-exploring cadete gets a full 10s of undisturbed looking
+  /// before it snaps back, not a countdown from the first touch.
+  Timer? _autoRecenterTimer;
+
+  /// North-up mode has no per-GPS-tick camera follow (see [_onLivePosition])
+  /// — continuously recentering on just the live position there would fight
+  /// the point of that mode, which is a stable overview of the whole route.
+  /// Instead this periodically re-applies the fit-to-bounds pose so the
+  /// frame stays current as the cadete moves. Runs only while `!_headingUp`
+  /// — started/stopped by [_syncNorthUpAutoFitTimer].
+  Timer? _northUpAutoFitTimer;
+
+  /// `true` once the first camera pose (position + zoom + rotation for the
+  /// default heading-up mode) has been applied after the map first gets a
+  /// known location — so the screen opens already framed correctly instead
+  /// of waiting for the first recenter trigger.
+  bool _initialPoseApplied = false;
+
+  /// Best known position, regardless of source (the route fetch's one-shot
+  /// fix, or the live GPS stream) — kept so [_applyCameraPose]'s callers
+  /// (button, timers, initial pose) always have somewhere to point the
+  /// camera, even before the live stream has emitted anything yet.
+  DeviceLocation? _lastKnownLocation;
+
+  /// Last route polyline seen, kept for the same reason as
+  /// [_lastKnownLocation]: north-up recenter needs to fit the whole route
+  /// in frame, and the button/timer that triggers it fire outside
+  /// `build`'s `routeAsync.data` scope. Updated on every build that has
+  /// route data; keeps its previous value while loading/erroring so a
+  /// recenter mid-retry still frames the last route we actually had.
+  List<latlong.LatLng> _lastKnownRoutePoints = const [];
 
   /// `true` (default) = the map rotates live so the destination always
   /// points up — "which way to go" is the direction of travel, so this
@@ -120,30 +186,33 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
 
   @override
   void dispose() {
-    _mapController.dispose();
+    _autoRecenterTimer?.cancel();
+    _northUpAutoFitTimer?.cancel();
+    _animatedMapController.dispose();
     super.dispose();
   }
 
-  void _toggleHeadingUp(DeviceLocation? currentLocation) {
-    setState(() => _headingUp = !_headingUp);
-    if (!_headingUp) {
-      // Snap back to north-up immediately.
-      try {
-        _mapController.rotate(0);
-      } catch (_) {
-        // Map not attached yet.
-      }
-      return;
-    }
-    // Apply the destination-up rotation right away using the last known
-    // position, rather than waiting for the next live GPS update — the
-    // stream only emits on ~5m of movement (`distanceFilter`), so toggling
-    // this back on while stationary previously did nothing until the
-    // cadete moved.
-    if (currentLocation != null) _rotateToDestination(currentLocation);
+  void _scheduleAutoRecenter() {
+    _autoRecenterTimer?.cancel();
+    _autoRecenterTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted || _followMe) return;
+      _recenter(_lastKnownLocation);
+    });
   }
 
-  void _rotateToDestination(DeviceLocation location) {
+  /// Starts/stops [_northUpAutoFitTimer] to match the current mode — call
+  /// after every `_headingUp` change (just [_toggleHeadingUp] today).
+  void _syncNorthUpAutoFitTimer() {
+    _northUpAutoFitTimer?.cancel();
+    _northUpAutoFitTimer = null;
+    if (_headingUp) return;
+    _northUpAutoFitTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted) return;
+      _applyCameraPose(_lastKnownLocation);
+    });
+  }
+
+  double _bearingToDestination(DeviceLocation location) {
     // Bearing from the live position straight to the destination — always
     // meaningful (unlike a movement- or compass-derived heading, which is
     // noisy or simply unavailable at walking speed) and it's exactly what
@@ -154,35 +223,95 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
       widget.order.latitude!,
       widget.order.longitude!,
     );
-    final heading = (rawBearing + 360) % 360;
-    try {
-      _mapController.rotate(-heading);
-    } catch (_) {
-      // Map not attached yet.
-    }
+    return (rawBearing + 360) % 360;
   }
 
-  void _recenter(DeviceLocation? location) {
+  /// The single place that decides what the camera should look like for the
+  /// current mode, and animates it there in one fluid motion — shared by
+  /// the initial pose (once a location is first known), the view-mode
+  /// toggle button, the 10s "lost centering" auto-recenter, the manual
+  /// recenter button, and the north-up 20s ambient re-fit. Every trigger
+  /// funnels through here so none of them can drift out of sync with the
+  /// others (e.g. one applying the 5-block zoom and another forgetting it).
+  ///
+  /// Heading-up ("camino a norte"): centers on [location], rotates so the
+  /// destination points up, and zooms to [_fiveBlockZoom] — like a
+  /// turn-by-turn navigator's locked view.
+  ///
+  /// North-up: rotates to true north (0°) and fits the camera to frame the
+  /// live position, the destination, and the whole route polyline — an
+  /// overview of the trip, not a fixed zoom around one point.
+  void _applyCameraPose(DeviceLocation? location) {
     if (location == null) return;
+    final currentPoint = latlong.LatLng(location.latitude, location.longitude);
     try {
-      _mapController.move(
-        latlong.LatLng(location.latitude, location.longitude),
-        _mapController.camera.zoom,
-      );
+      if (_headingUp) {
+        _animatedMapController.animateTo(
+          dest: currentPoint,
+          zoom: _fiveBlockZoom,
+          rotation: -_bearingToDestination(location),
+        );
+      } else {
+        final destination = latlong.LatLng(
+          widget.order.latitude!,
+          widget.order.longitude!,
+        );
+        final framePoints = <latlong.LatLng>{
+          currentPoint,
+          destination,
+          ..._lastKnownRoutePoints,
+        }.toList(growable: false);
+        if (framePoints.length < 2) {
+          _animatedMapController.animateTo(dest: currentPoint, rotation: 0);
+        } else {
+          _animatedMapController.animatedFitCamera(
+            cameraFit: CameraFit.coordinates(
+              coordinates: framePoints,
+              padding: const EdgeInsets.all(48),
+            ),
+            rotation: 0,
+          );
+        }
+      }
     } catch (_) {
       // FlutterMap not attached yet (or the test seam swapped it out for
       // a plain placeholder) — nothing to move.
     }
+  }
+
+  void _toggleHeadingUp() {
+    _autoRecenterTimer?.cancel();
+    setState(() {
+      _headingUp = !_headingUp;
+      _followMe = true;
+    });
+    _applyCameraPose(_lastKnownLocation);
+    _syncNorthUpAutoFitTimer();
+  }
+
+  /// Snaps the camera back onto [location] — the 10s auto-recenter and the
+  /// manual button both share this.
+  void _recenter(DeviceLocation? location) {
+    if (location == null) return;
+    _autoRecenterTimer?.cancel();
+    _applyCameraPose(location);
     setState(() => _followMe = true);
   }
 
   void _onLivePosition(DeviceLocation location) {
-    if (_headingUp) _rotateToDestination(location);
-    if (_followMe) {
+    _lastKnownLocation = location;
+    // Continuous per-tick tracking only applies to heading-up mode, and
+    // only while actually following — "como un navegador" means the camera
+    // stays locked on the cadete the whole time they're being followed, not
+    // just re-centering after the fact. North-up is an overview instead:
+    // [_northUpAutoFitTimer] refreshes its frame every 20s rather than
+    // chasing every GPS tick, which would fight seeing the whole route.
+    if (_headingUp && _followMe) {
       try {
-        _mapController.move(
-          latlong.LatLng(location.latitude, location.longitude),
-          _mapController.camera.zoom,
+        _animatedMapController.animateTo(
+          dest: latlong.LatLng(location.latitude, location.longitude),
+          rotation: -_bearingToDestination(location),
+          duration: _liveTrackingDuration,
         );
       } catch (_) {
         // FlutterMap not attached yet (or the test seam swapped it out for
@@ -236,6 +365,17 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
         routeAsync.when(
           data: (data) {
             final currentLocation = liveLocation ?? data.currentLocation;
+            _lastKnownLocation = currentLocation ?? _lastKnownLocation;
+            if (!_initialPoseApplied && _lastKnownLocation != null) {
+              // Opens already framed per the current mode (heading-up by
+              // default: centered, zoomed to the 5-block radius, rotated
+              // toward the destination) instead of waiting for the first
+              // recenter trigger. Deferred a frame so the map is attached.
+              _initialPoseApplied = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _applyCameraPose(_lastKnownLocation);
+              });
+            }
             final markers = <Marker>[destinationMarker];
             if (currentLocation != null) {
               markers.add(
@@ -250,11 +390,14 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
             }
             final polylines = <Polyline>[];
             if (data.route != null) {
+              final routePoints = data.route!.polylinePoints
+                  .map((point) => latlong.LatLng(point.latitude, point.longitude))
+                  .toList(growable: false);
+              // Cached for _recenter's north-up fit-to-bounds — see field doc.
+              _lastKnownRoutePoints = routePoints;
               polylines.add(
                 Polyline(
-                  points: data.route!.polylinePoints
-                      .map((point) => latlong.LatLng(point.latitude, point.longitude))
-                      .toList(growable: false),
+                  points: routePoints,
                   strokeWidth: 4,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -365,7 +508,7 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
           right: 12,
           child: FloatingActionButton.small(
             heroTag: 'nav-view-toggle',
-            onPressed: () => _toggleHeadingUp(liveLocation),
+            onPressed: _toggleHeadingUp,
             tooltip: _headingUp
                 ? 'Cambiar a vista norte arriba'
                 : 'Cambiar a vista destino arriba',
@@ -382,7 +525,7 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
             right: 12,
             child: FloatingActionButton.small(
               heroTag: 'nav-recenter',
-              onPressed: () => _recenter(liveLocation),
+              onPressed: () => _recenter(_lastKnownLocation),
               tooltip: 'Centrar en mi ubicación',
               child: const Icon(Icons.my_location),
             ),
@@ -405,7 +548,9 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody> {
         // (14→16) was too zoomed out for that.
         initialZoom: 17,
         onPositionChanged: (camera, hasGesture) {
-          if (hasGesture && _followMe) setState(() => _followMe = false);
+          if (!hasGesture) return;
+          if (_followMe) setState(() => _followMe = false);
+          _scheduleAutoRecenter();
         },
       ),
       children: [
