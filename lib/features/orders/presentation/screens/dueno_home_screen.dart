@@ -7,9 +7,9 @@ import '../../../../core/widgets/home_shell_helpers.dart';
 import '../../../../core/widgets/section_banner.dart';
 import '../../../auth/domain/app_session.dart';
 import '../../../auth/presentation/providers.dart' show sessionProvider;
+import '../../../catalog/presentation/screens/catalog_screen.dart';
 import 'delivery_stats_screen.dart';
 import 'orders_list_screen.dart';
-import 'products_screen.dart';
 
 const List<String> _sectionTitles = ['Pedidos', 'Estadísticas', 'Productos'];
 
@@ -37,7 +37,7 @@ class _DuenoHomeScreenState extends ConsumerState<DuenoHomeScreen> {
   static const _tabs = [
     OrdersListScreen(),
     DeliveryStatsScreen(),
-    ProductsScreen(),
+    CatalogScreen(),
   ];
 
   @override
