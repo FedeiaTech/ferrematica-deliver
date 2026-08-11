@@ -89,6 +89,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'deleted_at': order.deletedAt?.toUtc().toIso8601String(),
     'delivery_problem': order.deliveryProblem,
     'pending_balance': order.pendingBalance,
+    'valor_envio': order.valorEnvio,
   };
 
   /// Maps an `orders` row back to the domain [Order]. See [toRow].
@@ -127,6 +128,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     deletedAt: row['deleted_at'] == null ? null : DateTime.parse(row['deleted_at'] as String),
     deliveryProblem: row['delivery_problem'] as String?,
     pendingBalance: (row['pending_balance'] as num?)?.toDouble(),
+    valorEnvio: (row['valor_envio'] as num?)?.toDouble(),
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/

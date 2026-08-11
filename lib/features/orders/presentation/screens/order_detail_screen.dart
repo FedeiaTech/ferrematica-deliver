@@ -217,9 +217,9 @@ class _OrderDetailBody extends ConsumerWidget {
         if (order.clientPhone != null)
           _DetailRow(label: 'Teléfono', value: order.clientPhone!),
         if (order.amountToCharge != null)
-          _DetailRow(
-            label: 'Monto a cobrar',
-            value: order.amountToCharge!.toStringAsFixed(2),
+          _PricingSummary(
+            subtotal: order.amountToCharge!,
+            valorEnvio: order.valorEnvio,
           ),
         _DetailRow(
           label: 'Pago',
@@ -232,6 +232,11 @@ class _OrderDetailBody extends ConsumerWidget {
                     '\$${(order.amountToCharge! - order.pendingBalance!).toStringAsFixed(2)}, '
                     'falta \$${order.pendingBalance!.toStringAsFixed(2)}',
         ),
+        if (order.status == OrderStatus.entregado && order.deliveredAt != null)
+          _DetailRow(
+            label: 'Hora de entrega',
+            value: _formatFechaHora(order.deliveredAt!),
+          ),
         if (order.notes != null)
           _DetailRow(label: 'Notas', value: order.notes!),
         if (order.assignedCadeteId != null)
@@ -395,10 +400,9 @@ class _OrderDetailBody extends ConsumerWidget {
   /// screen). "Otro" opens a free-text dialog for anything else.
   static const List<String> _deliveryProblemReasons = [
     'Cliente ausente o no atendió',
-    'El cliente no pagó',
-    'El producto no llegó',
-    'El producto no era el correcto',
     'Dirección incorrecta o no encontrada',
+    'No recibió porque no pagó',
+    'El producto no era el correcto',
     'Inconveniente con el vehículo',
   ];
 
@@ -787,7 +791,24 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text('${detalle.descripcion} x${detalle.cantidad}'),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text('${detalle.descripcion} x${detalle.cantidad}'),
+                                ),
+                                if (detalle.comboId != null) ...[
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Combo',
+                                    style: TextStyle(
+                                      color: Colors.deepPurple,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                           Text(detalle.subtotal.toStringAsFixed(2)),
                         ],
@@ -1037,6 +1058,73 @@ class _PartialPaymentStep extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Shared `dd/mm/yyyy hh:mm` formatter — same shape as
+/// `_LinkedVentaTileState._formatFecha`/`_formatHora`, kept as its own
+/// top-level function here since it's used outside that class too (the
+/// "Hora de entrega" row).
+String _formatFechaHora(DateTime fecha) {
+  final local = fecha.toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${two(local.day)}/${two(local.month)}/${local.year} '
+      '${two(local.hour)}:${two(local.minute)}';
+}
+
+/// Subtotal (bold) / Envío (only when set) / Total (bold) breakdown —
+/// display-only, never persisted as a computed field (design: "el valor
+/// total no es necesario registrarlo en la factura"). [subtotal] is
+/// [Order.amountToCharge]; [valorEnvio] is added on top only when non-null.
+class _PricingSummary extends StatelessWidget {
+  const _PricingSummary({required this.subtotal, required this.valorEnvio});
+
+  final double subtotal;
+  final double? valorEnvio;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = subtotal + (valorEnvio ?? 0);
+    const boldStyle = TextStyle(fontWeight: FontWeight.bold);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 120,
+                child: Text('Subtotal', style: boldStyle),
+              ),
+              Text('\$${subtotal.toStringAsFixed(2)}', style: boldStyle),
+            ],
+          ),
+          if (valorEnvio != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  const SizedBox(width: 120, child: Text('Envío')),
+                  Text('\$${valorEnvio!.toStringAsFixed(2)}'),
+                ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 120,
+                  child: Text('Total', style: boldStyle),
+                ),
+                Text('\$${total.toStringAsFixed(2)}', style: boldStyle),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

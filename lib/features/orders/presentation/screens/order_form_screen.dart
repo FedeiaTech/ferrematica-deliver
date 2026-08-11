@@ -38,6 +38,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   late final TextEditingController _clientPhoneController;
   late final TextEditingController _notesController;
   late final TextEditingController _amountController;
+  late final TextEditingController _envioController;
   late PaymentMethod _paymentMethod;
   late final String _cityAtFormOpen;
   bool _canSave = false;
@@ -64,6 +65,12 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   /// [_ventaTotales] to subtract it back out of the amount field.
   final Map<String, DateTime> _ventaFechas = <String, DateTime>{};
   final Map<String, double> _ventaTotales = <String, double>{};
+
+  /// `venta.ventaLocalId` for every id in [_selectedVentaIds] — display-only,
+  /// same bookkeeping shape as [_ventaFechas]/[_ventaTotales]. Used to label
+  /// each venta's framed block ("Factura Nº ...") the same way
+  /// `order_detail_screen.dart`'s `_LinkedVentaTile` does post-creation.
+  final Map<String, int> _ventaLocalIds = <String, int>{};
 
   Order? get _existing => widget.existingOrder;
 
@@ -102,6 +109,9 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     _amountController = TextEditingController(
       text: source?.amountToCharge?.toString() ?? '',
     );
+    _envioController = TextEditingController(
+      text: source?.valorEnvio?.toString() ?? '',
+    );
     _paymentMethod = source?.paymentMethod ?? PaymentMethod.efectivo;
     _items = List<OrderItem>.from(source?.items ?? const <OrderItem>[]);
     _canSave = _addressController.text.trim().isNotEmpty;
@@ -131,6 +141,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
       _selectedVentaIds.add(venta.id);
       _ventaFechas[venta.id] = venta.fecha;
       _ventaTotales[venta.id] = venta.total;
+      _ventaLocalIds[venta.id] = venta.ventaLocalId;
       _items.addAll(
         venta.detalles.map(
           (detalle) => OrderItem(
@@ -174,6 +185,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
       _items.removeWhere((item) => item.sourceVentaId == ventaId);
       _selectedVentaIds.remove(ventaId);
       _ventaFechas.remove(ventaId);
+      _ventaLocalIds.remove(ventaId);
       final total = _ventaTotales.remove(ventaId);
       if (total != null) {
         final currentAmount = double.tryParse(_amountController.text.trim()) ?? 0;
@@ -191,6 +203,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     _clientPhoneController.dispose();
     _notesController.dispose();
     _amountController.dispose();
+    _envioController.dispose();
     super.dispose();
   }
 
@@ -203,6 +216,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     final clientPhone = _emptyToNull(_clientPhoneController.text);
     final notes = _emptyToNull(_notesController.text);
     final amount = double.tryParse(_amountController.text.trim());
+    final envio = double.tryParse(_envioController.text.trim());
 
     final cityHint = ref.read(selectedGeocodingCityProvider);
     final controller = ref.read(ordersControllerProvider.notifier);
@@ -215,6 +229,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
           clientPhone: clientPhone,
           notes: notes,
           amountToCharge: amount,
+          valorEnvio: envio,
           paymentMethod: _paymentMethod,
           items: _items,
           cityHint: cityHint,
@@ -230,6 +245,8 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             amountToCharge: amount,
             paymentMethod: _paymentMethod,
             items: _items,
+            valorEnvio: envio,
+            clearValorEnvio: envio == null,
           ),
           cityHint: cityHint,
           forceRegeocode: cityHint != _cityAtFormOpen,
@@ -249,6 +266,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
         _selectedVentaIds.clear();
         _ventaFechas.clear();
         _ventaTotales.clear();
+        _ventaLocalIds.clear();
         _items.removeWhere((item) => item.sourceVentaId != null);
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
@@ -262,6 +280,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     } else {
       context.go('/orders');
     }
+  }
+
+  /// Groups [_items] into consecutive runs sharing the same
+  /// `sourceVentaId` — each run becomes one [_ItemGroup] so the build
+  /// method can render one framed block per venta (a manually-added run,
+  /// `ventaId == null`, is never grouped visually; each of its items stays
+  /// its own row). Preserves each item's original index into [_items] so
+  /// increment/decrement/remove callbacks still target the right element.
+  List<_ItemGroup> _groupedItems() {
+    final groups = <_ItemGroup>[];
+    for (var index = 0; index < _items.length; index++) {
+      final item = _items[index];
+      final last = groups.isEmpty ? null : groups.last;
+      if (last != null && last.ventaId == item.sourceVentaId) {
+        last.items.add((index: index, item: item));
+      } else {
+        groups.add(
+          _ItemGroup(ventaId: item.sourceVentaId, items: [(index: index, item: item)]),
+        );
+      }
+    }
+    return groups;
   }
 
   String? _emptyToNull(String value) {
@@ -342,19 +382,31 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
               const SizedBox(height: 16),
               Text('Productos', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
-              for (var index = 0; index < _items.length; index++)
-                _OrderItemRow(
-                  key: ValueKey('order-item-$index'),
-                  item: _items[index],
-                  ventaFecha: _items[index].sourceVentaId != null
-                      ? _ventaFechas[_items[index].sourceVentaId]
-                      : null,
-                  onIncrement: () => _changeItemQuantity(index, 1),
-                  onDecrement: () => _changeItemQuantity(index, -1),
-                  onRemove: _items[index].sourceVentaId != null
-                      ? () => _removeVenta(_items[index].sourceVentaId!)
-                      : () => _removeItem(index),
-                ),
+              // Venta-sourced lines are grouped into one softly-framed block
+              // per factura, with a single delete icon for the whole venta
+              // (a venta is one atomic POS sale — there's no partial removal,
+              // see `_removeVenta`'s doc comment). Manually-added lines
+              // (`sourceVentaId == null`) stay as individual editable rows,
+              // rendered in the order they were added relative to the
+              // venta groups they're interleaved with.
+              for (final group in _groupedItems())
+                if (group.ventaId != null)
+                  _VentaItemsBlock(
+                    ventaLocalId: _ventaLocalIds[group.ventaId],
+                    ventaFecha: _ventaFechas[group.ventaId],
+                    items: group.items,
+                    onRemove: () => _removeVenta(group.ventaId!),
+                  )
+                else
+                  for (final indexedItem in group.items)
+                    _OrderItemRow(
+                      key: ValueKey('order-item-${indexedItem.index}'),
+                      item: indexedItem.item,
+                      ventaFecha: null,
+                      onIncrement: () => _changeItemQuantity(indexedItem.index, 1),
+                      onDecrement: () => _changeItemQuantity(indexedItem.index, -1),
+                      onRemove: () => _removeItem(indexedItem.index),
+                    ),
             ],
             const SizedBox(height: 16),
             ExpansionTile(
@@ -391,6 +443,17 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                           decimal: true,
                         ),
                         validator: _validateAmount,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _envioController,
+                        decoration: const InputDecoration(
+                          labelText: 'Valor de envío',
+                          hintText: '-',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<PaymentMethod>(
@@ -522,6 +585,84 @@ class _CitySelector extends ConsumerWidget {
             child: const Text('Agregar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A run of [_items] sharing the same `sourceVentaId` (`null` for a run of
+/// manually-added lines) — see `_OrderFormScreenState._groupedItems`.
+class _ItemGroup {
+  _ItemGroup({required this.ventaId, required this.items});
+
+  final String? ventaId;
+  final List<({int index, OrderItem item})> items;
+}
+
+/// One venta's product lines, framed together in a single soft card with
+/// one delete icon for the whole factura — mirrors the visual language
+/// `order_detail_screen.dart`'s `_LinkedVentaTile` already uses for a
+/// linked venta (a `Card` with rounded corners, a light tint instead of a
+/// heavy border). Unlike that read-only post-creation view, this one is
+/// still editable pre-submit: the single [onRemove] un-picks the entire
+/// venta (see `_OrderFormScreenState._removeVenta`), never a single line.
+class _VentaItemsBlock extends StatelessWidget {
+  const _VentaItemsBlock({
+    required this.ventaLocalId,
+    required this.ventaFecha,
+    required this.items,
+    required this.onRemove,
+  });
+
+  final int? ventaLocalId;
+  final DateTime? ventaFecha;
+  final List<({int index, OrderItem item})> items;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    ventaLocalId != null
+                        ? 'Factura Nº $ventaLocalId'
+                        : 'Venta del POS',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (ventaFecha != null)
+                  Text(
+                    _OrderItemRow._formatFechaHora(ventaFecha!),
+                    style: TextStyle(fontSize: 12, color: colorScheme.outline),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Quitar esta venta del pedido',
+                  onPressed: onRemove,
+                ),
+              ],
+            ),
+            for (final indexedItem in items)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 2),
+                child: Text(indexedItem.item.productName),
+              ),
+          ],
+        ),
       ),
     );
   }

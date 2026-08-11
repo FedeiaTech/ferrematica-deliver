@@ -98,6 +98,7 @@ final class Order {
     this.deletedAt,
     this.deliveryProblem,
     this.pendingBalance,
+    this.valorEnvio,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
@@ -149,6 +150,14 @@ final class Order {
   /// the `orders_pending_balance_valido` CHECK constraint in Supabase.
   final double? pendingBalance;
 
+  /// Delivery fee, entered separately from [amountToCharge] (the goods'
+  /// price) — optional, `null` until the dueño/cadete fills it in. Kept
+  /// entirely outside the `amountToCharge`/`pendingBalance` invariants: the
+  /// delivery fee is not part of what's "cobrado" on the sale, it's a
+  /// display-only addend for the Subtotal/Envío/Total breakdown (design:
+  /// "el valor total no es necesario registrarlo en la factura").
+  final double? valorEnvio;
+
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
       amountToCharge == null || paymentMethod == PaymentMethod.sinDefinir;
@@ -198,6 +207,8 @@ final class Order {
     String? deliveryProblem,
     double? pendingBalance,
     bool clearPendingBalance = false,
+    double? valorEnvio,
+    bool clearValorEnvio = false,
   }) {
     return Order(
       id: id,
@@ -224,6 +235,7 @@ final class Order {
       deletedAt: deletedAt ?? this.deletedAt,
       deliveryProblem: deliveryProblem ?? this.deliveryProblem,
       pendingBalance: clearPendingBalance ? null : (pendingBalance ?? this.pendingBalance),
+      valorEnvio: clearValorEnvio ? null : (valorEnvio ?? this.valorEnvio),
     );
   }
 }
