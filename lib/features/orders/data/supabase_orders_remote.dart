@@ -38,10 +38,10 @@ class SupabaseOrdersRemote implements OrdersRemote {
   Future<Order> upsert(Order order) async {
     final row = await _client
         .from(_table)
-        .upsert(_toRow(order), onConflict: 'id')
+        .upsert(toRow(order), onConflict: 'id')
         .select()
         .single();
-    return _fromRow(row);
+    return fromRow(row);
   }
 
   @override
@@ -51,10 +51,15 @@ class SupabaseOrdersRemote implements OrdersRemote {
         .select()
         .gt('updated_at', since.toUtc().toIso8601String())
         .order('updated_at');
-    return rows.map((row) => _fromRow(row)).toList(growable: false);
+    return rows.map((row) => fromRow(row)).toList(growable: false);
   }
 
-  static Map<String, dynamic> _toRow(Order order) => <String, dynamic>{
+  /// Maps a domain [Order] to its `orders` row shape. Not underscore-private
+  /// so `pending_balance` (migration 0013) round-trip mapping can be
+  /// unit-tested directly, matching the [statusToRow]/[statusFromRow]
+  /// precedent.
+  @visibleForTesting
+  static Map<String, dynamic> toRow(Order order) => <String, dynamic>{
     'id': order.id,
     'created_by': order.createdBy,
     'assigned_cadete_id': order.assignedCadeteId,
@@ -74,6 +79,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
           (item) => <String, dynamic>{
             'product_name': item.productName,
             'quantity': item.quantity,
+            'source_venta_id': item.sourceVentaId,
           },
         )
         .toList(growable: false),
@@ -82,9 +88,12 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'delivered_at': order.deliveredAt?.toUtc().toIso8601String(),
     'deleted_at': order.deletedAt?.toUtc().toIso8601String(),
     'delivery_problem': order.deliveryProblem,
+    'pending_balance': order.pendingBalance,
   };
 
-  static Order _fromRow(Map<String, dynamic> row) => Order(
+  /// Maps an `orders` row back to the domain [Order]. See [toRow].
+  @visibleForTesting
+  static Order fromRow(Map<String, dynamic> row) => Order(
     id: row['id'] as String,
     deliveryAddress: row['delivery_address'] as String,
     createdBy: row['created_by'] as String,
@@ -106,6 +115,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
           (dynamic item) => OrderItem(
             productName: (item as Map<String, dynamic>)['product_name'] as String,
             quantity: item['quantity'] as int,
+            sourceVentaId: item['source_venta_id'] as String?,
           ),
         )
         .toList(growable: false),
@@ -116,6 +126,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
         : DateTime.parse(row['delivered_at'] as String),
     deletedAt: row['deleted_at'] == null ? null : DateTime.parse(row['deleted_at'] as String),
     deliveryProblem: row['delivery_problem'] as String?,
+    pendingBalance: (row['pending_balance'] as num?)?.toDouble(),
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/

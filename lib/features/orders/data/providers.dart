@@ -7,6 +7,8 @@ import '../domain/orders_repository.dart';
 import 'isar_orders_repository.dart';
 import 'order_sync_service.dart';
 import 'supabase_orders_remote.dart';
+import 'venta_disponible.dart';
+import 'ventas_remote.dart';
 
 /// Exposes [Connectivity]'s change stream. Overridable in tests with a fake
 /// `Stream<List<ConnectivityResult>>` (e.g. a `StreamController`).
@@ -45,3 +47,29 @@ final Provider<OrderSyncService> orderSyncServiceProvider = Provider<OrderSyncSe
   ref.onDispose(service.dispose);
   return service;
 });
+
+/// The [VentasRemote] port, backed by the real `supabase_flutter` client.
+/// Read-only from the UI's perspective (plus the write-only claim) — see
+/// `sdd/ventas-sync-envio` design decision D7.
+final Provider<VentasRemote> ventasRemoteProvider = Provider<VentasRemote>(
+  (ref) => SupabaseVentasRemote(ref.watch(supabaseProvider)),
+);
+
+/// Fetches the ventas eligible for the "desde venta" pedido picker
+/// (`order-prefill-from-venta` spec domain). `autoDispose` so the list is
+/// re-fetched fresh every time the picker is opened, instead of holding a
+/// stale cache between pedido-creation sessions.
+final FutureProvider<List<VentaDisponible>> ventasDisponiblesProvider =
+    FutureProvider.autoDispose<List<VentaDisponible>>(
+      (ref) => ref.watch(ventasRemoteProvider).fetchDisponibles(),
+    );
+
+/// Every venta linked to the order [orderId] — `order_detail_screen.dart`
+/// watches this to warn the dueño when a linked venta was anulada after the
+/// pedido was created (design decision D8), and to list all of them when
+/// more than one POS sale was bundled into the same delivery. `autoDispose`
+/// so re-opening a detail screen re-checks instead of holding a stale
+/// answer across the app's lifetime.
+final linkedVentasProvider = FutureProvider.family.autoDispose<List<LinkedVenta>, String>(
+  (ref, orderId) => ref.watch(ventasRemoteProvider).fetchLinkedVentas(orderId),
+);

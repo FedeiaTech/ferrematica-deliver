@@ -36,6 +36,7 @@ class OrderModel {
     this.deliveredAt,
     this.deletedAt,
     this.deliveryProblem,
+    this.pendingBalance,
   });
 
   Id get isarId => fastHash(id);
@@ -77,6 +78,10 @@ class OrderModel {
   final DateTime? deliveredAt;
   final DateTime? deletedAt;
   final String? deliveryProblem;
+
+  /// Mirrors [Order.pendingBalance]. Purely additive nullable property —
+  /// no `@enumerated`, no schema-version bump. See design decision DA1.
+  final double? pendingBalance;
 }
 
 /// Embedded line item — part of the [OrderModel] row itself, not a separate
@@ -84,10 +89,11 @@ class OrderModel {
 /// order_items table".
 @embedded
 class OrderItemModel {
-  OrderItemModel({this.productName = '', this.quantity = 0});
+  OrderItemModel({this.productName = '', this.quantity = 0, this.sourceVentaId});
 
   final String productName;
   final int quantity;
+  final String? sourceVentaId;
 }
 
 /// Maps a domain [Order] to its Isar row representation.
@@ -114,6 +120,7 @@ OrderModel orderToModel(Order order) {
           (item) => OrderItemModel(
             productName: item.productName,
             quantity: item.quantity,
+            sourceVentaId: item.sourceVentaId,
           ),
         )
         .toList(growable: false),
@@ -121,6 +128,7 @@ OrderModel orderToModel(Order order) {
     deliveredAt: order.deliveredAt,
     deletedAt: order.deletedAt,
     deliveryProblem: order.deliveryProblem,
+    pendingBalance: order.pendingBalance,
   );
 }
 
@@ -148,6 +156,7 @@ Order orderModelToDomain(OrderModel model) {
           (item) => OrderItem(
             productName: item.productName,
             quantity: item.quantity,
+            sourceVentaId: item.sourceVentaId,
           ),
         )
         .toList(growable: false),
@@ -155,6 +164,7 @@ Order orderModelToDomain(OrderModel model) {
     deliveredAt: model.deliveredAt,
     deletedAt: model.deletedAt,
     deliveryProblem: model.deliveryProblem,
+    pendingBalance: model.pendingBalance,
   );
 }
 
