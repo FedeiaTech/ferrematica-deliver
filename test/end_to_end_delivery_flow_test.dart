@@ -179,7 +179,7 @@ void main() {
       expect(find.text('Marcar entrega'), findsOneWidget);
       await tester.tap(find.text('Marcar entrega'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cobrado'));
+      await tester.tap(find.text('Pago total'));
       await tester.pumpAndSettle();
 
       final deliveredOrder = await repository.getById(createdOrder.id);

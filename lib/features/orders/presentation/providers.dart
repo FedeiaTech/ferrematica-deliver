@@ -165,6 +165,25 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// `orders.created_by → profiles.id` FK against a real project. The
   /// router guard should make this unreachable in practice (order screens
   /// only render for an authenticated dueño).
+  ///
+  /// [fromVentaIds] (`sdd/ventas-sync-envio` design decision D4,
+  /// claim-before-create, extended to support bundling several sales into
+  /// one delivery): each `venta_order_links` row is written FIRST, in
+  /// order, using the client-generated order id below — only once every
+  /// claim succeeds does the order itself get saved locally. A concurrent
+  /// claim on any of these ventas from another device surfaces as
+  /// [VentaYaVinculadaException] and this method throws without saving
+  /// anything, so the caller (order_form_screen.dart) never ends up with an
+  /// order that silently lost a venta link.
+  ///
+  /// A claim already written earlier in this same loop is NOT rolled back
+  /// on a later failure — `venta_order_links` rows are never
+  /// deleted/broken once written (design decision D8), so there is no
+  /// "unclaim" to call. That earlier-claimed venta stays linked to an
+  /// [orderId] that will never be saved and simply won't reappear in the
+  /// picker again; the caller clears the whole venta selection and has the
+  /// dueño re-pick, same recovery shape as the single-venta case already
+  /// had.
   Future<void> createOrder({
     required String deliveryAddress,
     String? clientName,
@@ -174,14 +193,21 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     PaymentMethod paymentMethod = PaymentMethod.efectivo,
     List<OrderItem> items = const <OrderItem>[],
     String? cityHint,
+    List<String> fromVentaIds = const <String>[],
   }) async {
     final session = ref.read(sessionProvider).value;
     if (session == null) {
       throw StateError('createOrder requires an authenticated session');
     }
+    final orderId = const Uuid().v4();
+    for (final ventaId in fromVentaIds) {
+      await ref
+          .read(ventasRemoteProvider)
+          .claimVenta(ventaId: ventaId, orderId: orderId, createdBy: session.userId);
+    }
     final now = DateTime.now();
     final order = Order(
-      id: const Uuid().v4(),
+      id: orderId,
       deliveryAddress: deliveryAddress,
       createdBy: session.userId,
       createdAt: now,
@@ -363,15 +389,26 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// transition even when it is still `pendiente` — the caller surfaces
   /// that via [Order.needsPaymentFollowUp] and the payment-pending banner,
   /// per spec's "Incomplete-order and payment-pending alerts" requirement.
+  ///
+  /// [pendingBalance] carries the still-owed amount for a partial
+  /// collection ("Cobro parcial" in `_openMarkDeliveredSheet`) — `null`
+  /// means either nothing was collected yet or it was collected in full.
+  /// The clear case is explicit via `clearPendingBalance:
+  /// pendingBalance == null` so `copyWith`'s `?? this.pendingBalance`
+  /// default can never leave a stale balance behind when this method is
+  /// called again (e.g. settling a previously-partial delivery in full).
   Future<void> markDelivered(
     Order order, {
     required PaymentStatus paymentStatus,
+    double? pendingBalance,
   }) async {
     if (!isValidTransition(order.status, OrderStatus.entregado)) return;
     await _repository.save(
       order.copyWith(
         status: OrderStatus.entregado,
         paymentStatus: paymentStatus,
+        pendingBalance: pendingBalance,
+        clearPendingBalance: pendingBalance == null,
         deliveredAt: DateTime.now(),
         syncStatus: SyncStatus.pending,
       ),

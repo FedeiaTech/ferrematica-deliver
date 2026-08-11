@@ -3,9 +3,22 @@ import 'package:ferrematica_express/features/orders/domain/order.dart';
 import 'package:ferrematica_express/features/orders/presentation/screens/order_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../helpers/pump_app.dart';
 import 'fake_orders_repository.dart';
+
+/// "Marcar entregado" pops the detail screen (order_detail_screen.dart), so
+/// tests exercising it need a real GoRouter in the tree — a bare
+/// `MaterialApp(home: ...)` has no GoRouter and `context.pop()`/`canPop()`
+/// throw without one.
+Widget _withRouter(Widget home) {
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [GoRoute(path: '/', builder: (context, state) => home)],
+  );
+  return MaterialApp.router(routerConfig: router);
+}
 
 void main() {
   testWidgets(
@@ -21,7 +34,7 @@ void main() {
 
       await pumpApp(
         tester,
-        const MaterialApp(home: OrderDetailScreen(orderId: 'order-1')),
+        _withRouter(const OrderDetailScreen(orderId: 'order-1')),
         overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
       );
       await tester.pumpAndSettle();

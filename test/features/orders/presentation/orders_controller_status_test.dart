@@ -93,6 +93,68 @@ void main() {
     });
   });
 
+  group('OrdersController.markDelivered', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('cobrado with no pendingBalance leaves it null', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino, amountToCharge: 100);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markDelivered(order, paymentStatus: PaymentStatus.cobrado);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.entregado);
+      expect(saved.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.pendingBalance, isNull);
+    });
+
+    test('cobrado with a partial pendingBalance persists it', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino, amountToCharge: 100);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markDelivered(order, paymentStatus: PaymentStatus.cobrado, pendingBalance: 60);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.entregado);
+      expect(saved.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.pendingBalance, 60);
+    });
+
+    test('an order that already had a pendingBalance gets it cleared on full payment', () async {
+      // Simulates re-marking delivered (or a follow-up settle) where the
+      // caller now passes null — pendingBalance must not silently linger
+      // via copyWith's default `?? this.pendingBalance` behavior.
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+        pendingBalance: 60,
+      );
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markDelivered(order, paymentStatus: PaymentStatus.cobrado);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.pendingBalance, isNull);
+    });
+  });
+
   group('OrdersController.assignCadete', () {
     late FakeOrdersRepository repository;
     late ProviderContainer container;

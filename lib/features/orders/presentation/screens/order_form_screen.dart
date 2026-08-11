@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/ventas_remote.dart' show VentaYaVinculadaException;
 import '../../domain/order.dart';
 import '../providers.dart';
+import '../widgets/venta_picker_sheet.dart';
 
 /// Create/edit form for an order. [existingOrder] is `null` when creating.
 ///
@@ -40,6 +42,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   late final String _cityAtFormOpen;
   bool _canSave = false;
   bool _saving = false;
+
+  /// Line items — a manually-added/edit-carried-over line (`sourceVentaId
+  /// == null`) stays fully editable; a line prefilled by [_pickVenta]
+  /// mirrors an actual completed POS sale, so it renders locked in
+  /// `_OrderItemRow` and can only be removed as a whole venta (see
+  /// [_removeVenta]), never quantity-adjusted.
+  List<OrderItem> _items = <OrderItem>[];
+
+  /// Server-generated `ventas.id`s of every venta picked via [_pickVenta],
+  /// in pick order. Only used to claim the links on submit (design
+  /// decision D4) — never written at selection time. Several ventas can be
+  /// bundled into one pedido; picking a new one appends to this list and to
+  /// [_items] instead of replacing the previous pick.
+  final List<String> _selectedVentaIds = <String>[];
+
+  /// `venta.fecha`/`venta.total` for every id in [_selectedVentaIds],
+  /// keyed by venta id — purely transient display/bookkeeping state, not
+  /// persisted on [OrderItem]. `_OrderItemRow` reads [_ventaFechas] to show
+  /// when a locked line's venta happened; [_removeVenta] reads
+  /// [_ventaTotales] to subtract it back out of the amount field.
+  final Map<String, DateTime> _ventaFechas = <String, DateTime>{};
+  final Map<String, double> _ventaTotales = <String, double>{};
 
   Order? get _existing => widget.existingOrder;
 
@@ -79,6 +103,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
       text: source?.amountToCharge?.toString() ?? '',
     );
     _paymentMethod = source?.paymentMethod ?? PaymentMethod.efectivo;
+    _items = List<OrderItem>.from(source?.items ?? const <OrderItem>[]);
     _canSave = _addressController.text.trim().isNotEmpty;
     _addressController.addListener(_onAddressChanged);
   }
@@ -86,6 +111,76 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   void _onAddressChanged() {
     final canSave = _addressController.text.trim().isNotEmpty;
     if (canSave != _canSave) setState(() => _canSave = canSave);
+  }
+
+  /// Opens the "desde venta" picker (excluding ventas already added to this
+  /// form) and, on selection, APPENDS to [_items] (`productLabel`/
+  /// `quantityForOrder` — see `VentaDetalleDisponible`'s D6 handling of
+  /// fractional quantities), tagged with `sourceVentaId` so they render
+  /// locked, and adds the venta's total on top of whatever `amountToCharge`
+  /// already had — several sales can be bundled into one delivery. Per
+  /// spec, the client/destinatario field is deliberately left untouched —
+  /// the venta carries no such data.
+  Future<void> _pickVenta() async {
+    final venta = await showVentaPickerSheet(
+      context,
+      excludedVentaIds: _selectedVentaIds.toSet(),
+    );
+    if (venta == null || !mounted) return;
+    setState(() {
+      _selectedVentaIds.add(venta.id);
+      _ventaFechas[venta.id] = venta.fecha;
+      _ventaTotales[venta.id] = venta.total;
+      _items.addAll(
+        venta.detalles.map(
+          (detalle) => OrderItem(
+            productName: detalle.productLabel,
+            quantity: detalle.quantityForOrder,
+            sourceVentaId: venta.id,
+          ),
+        ),
+      );
+      final previousAmount = double.tryParse(_amountController.text.trim()) ?? 0;
+      _amountController.text = (previousAmount + venta.total).toString();
+    });
+  }
+
+  void _changeItemQuantity(int index, int delta) {
+    setState(() {
+      final item = _items[index];
+      if (item.sourceVentaId != null) return;
+      final quantity = item.quantity + delta;
+      if (quantity < 1) return;
+      _items[index] = item.copyWith(quantity: quantity);
+    });
+  }
+
+  void _removeItem(int index) {
+    if (_items[index].sourceVentaId != null) return;
+    setState(() => _items.removeAt(index));
+  }
+
+  /// Un-picks an entire venta from the pedido: every [OrderItem] sharing
+  /// [ventaId], the id itself from [_selectedVentaIds] (so it becomes
+  /// pickable again in [showVentaPickerSheet]), and its [_ventaFechas]/
+  /// [_ventaTotales] bookkeeping — subtracting its total back out of
+  /// [_amountController], mirroring [_pickVenta]'s addition. A venta is one
+  /// atomic POS sale: there's no such thing as removing one of its product
+  /// lines while keeping the rest, so the trash icon on a locked row always
+  /// un-picks the whole venta, never a single line (unlike a manually-added
+  /// item's [_removeItem], which stays single-line).
+  void _removeVenta(String ventaId) {
+    setState(() {
+      _items.removeWhere((item) => item.sourceVentaId == ventaId);
+      _selectedVentaIds.remove(ventaId);
+      _ventaFechas.remove(ventaId);
+      final total = _ventaTotales.remove(ventaId);
+      if (total != null) {
+        final currentAmount = double.tryParse(_amountController.text.trim()) ?? 0;
+        final updated = currentAmount - total;
+        _amountController.text = updated <= 0 ? '' : updated.toString();
+      }
+    });
   }
 
   @override
@@ -112,29 +207,52 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     final cityHint = ref.read(selectedGeocodingCityProvider);
     final controller = ref.read(ordersControllerProvider.notifier);
     final existing = _existing;
-    if (existing == null) {
-      await controller.createOrder(
-        deliveryAddress: address,
-        clientName: clientName,
-        clientPhone: clientPhone,
-        notes: notes,
-        amountToCharge: amount,
-        paymentMethod: _paymentMethod,
-        cityHint: cityHint,
-      );
-    } else {
-      await controller.updateOrder(
-        existing.copyWith(
+    try {
+      if (existing == null) {
+        await controller.createOrder(
           deliveryAddress: address,
           clientName: clientName,
           clientPhone: clientPhone,
           notes: notes,
           amountToCharge: amount,
           paymentMethod: _paymentMethod,
-        ),
-        cityHint: cityHint,
-        forceRegeocode: cityHint != _cityAtFormOpen,
-      );
+          items: _items,
+          cityHint: cityHint,
+          fromVentaIds: _selectedVentaIds,
+        );
+      } else {
+        await controller.updateOrder(
+          existing.copyWith(
+            deliveryAddress: address,
+            clientName: clientName,
+            clientPhone: clientPhone,
+            notes: notes,
+            amountToCharge: amount,
+            paymentMethod: _paymentMethod,
+            items: _items,
+          ),
+          cityHint: cityHint,
+          forceRegeocode: cityHint != _cityAtFormOpen,
+        );
+      }
+    } on VentaYaVinculadaException catch (error) {
+      // Race lost against another device (design decision D4): the claim
+      // was rejected, so NOTHING was saved locally — `createOrder` throws
+      // before the first `_repository.save`. A claim earlier in this same
+      // batch may have already gone through and stays claimed (D8 — links
+      // are never deleted), so there's no partial state to reconcile here:
+      // clear every venta-sourced pick/item and let the dueño re-pick from
+      // scratch instead of retrying blind against the same failed set.
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _selectedVentaIds.clear();
+        _ventaFechas.clear();
+        _ventaTotales.clear();
+        _items.removeWhere((item) => item.sourceVentaId != null);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      return;
     }
 
     if (!mounted) return;
@@ -149,6 +267,28 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
   String? _emptyToNull(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// DA4: once a delivery has been marked delivered with a partial payment
+  /// (`pendingBalance` recorded), the dueño must not be able to shrink
+  /// `amountToCharge` below the still-owed balance from this form — that
+  /// would silently make the order look fully paid (or overpaid) without an
+  /// actual payment happening. Only applies while editing an order that
+  /// already carries a [Order.pendingBalance]; a brand-new order or one
+  /// with no recorded partial payment can have its amount edited freely.
+  String? _validateAmount(String? value) {
+    final pendingBalance = _existing?.pendingBalance;
+    if (pendingBalance == null) return null;
+    final amount = double.tryParse((value ?? '').trim());
+    // Strictly greater, not >= — [Order]'s DA3 invariant requires
+    // `pendingBalance < amountToCharge` (a partial payment implies
+    // something is still owed); an edit that brings amountToCharge down to
+    // exactly the pending balance would leave nothing owed without an
+    // actual payment happening, which is just as wrong as going below it.
+    if (amount == null || amount <= pendingBalance) {
+      return 'El monto no puede ser menor o igual al saldo pendiente de \$$pendingBalance';
+    }
+    return null;
   }
 
   @override
@@ -187,6 +327,35 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
             ),
             const SizedBox(height: 12),
             const _CitySelector(),
+            // "Desde venta" prefill is only offered for a brand-new order —
+            // not while editing, where the venta link (if any) was already
+            // claimed at creation time and can't be swapped out here.
+            if (!isEditing) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _pickVenta,
+                icon: const Icon(Icons.point_of_sale_outlined),
+                label: const Text('Usar venta del POS'),
+              ),
+            ],
+            if (_items.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('Productos', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 4),
+              for (var index = 0; index < _items.length; index++)
+                _OrderItemRow(
+                  key: ValueKey('order-item-$index'),
+                  item: _items[index],
+                  ventaFecha: _items[index].sourceVentaId != null
+                      ? _ventaFechas[_items[index].sourceVentaId]
+                      : null,
+                  onIncrement: () => _changeItemQuantity(index, 1),
+                  onDecrement: () => _changeItemQuantity(index, -1),
+                  onRemove: _items[index].sourceVentaId != null
+                      ? () => _removeVenta(_items[index].sourceVentaId!)
+                      : () => _removeItem(index),
+                ),
+            ],
             const SizedBox(height: 16),
             ExpansionTile(
               title: const Text('Datos opcionales'),
@@ -221,6 +390,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        validator: _validateAmount,
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<PaymentMethod>(
@@ -354,5 +524,82 @@ class _CitySelector extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// One line item. A manually-typed line (or one carried over from an edit)
+/// stays fully editable: quantity via +/- (never a free-text field, so an
+/// invalid empty/zero value can't reach [OrdersController.createOrder]) and
+/// removable via [onRemove]. A line with `item.sourceVentaId != null`
+/// mirrors an actual completed POS sale (`_pickVenta`) — its quantity is an
+/// implicit, non-editable value (there's nothing to show or lock: it's
+/// simply not a control), so instead of a quantity/lock display it shows
+/// when that venta happened ([ventaFecha]) and a single delete icon that
+/// (via [onRemove], wired by the caller to `_OrderFormScreenState.
+/// _removeVenta`) un-picks the whole venta, not just this line.
+class _OrderItemRow extends StatelessWidget {
+  const _OrderItemRow({
+    required this.item,
+    required this.ventaFecha,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onRemove,
+    super.key,
+  });
+
+  final OrderItem item;
+  final DateTime? ventaFecha;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final locked = item.sourceVentaId != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(item.productName)),
+          if (locked) ...[
+            if (ventaFecha != null) ...[
+              Text(
+                _formatFechaHora(ventaFecha!),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Quitar esta venta del pedido',
+              onPressed: onRemove,
+            ),
+          ] else ...[
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: item.quantity > 1 ? onDecrement : null,
+            ),
+            Text('${item.quantity}'),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: onIncrement,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: onRemove,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _formatFechaHora(DateTime fecha) {
+    final local = fecha.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)} ${two(local.hour)}:${two(local.minute)}';
   }
 }

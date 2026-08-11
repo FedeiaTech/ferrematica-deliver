@@ -77,8 +77,8 @@ void main() {
 
       await pumpApp(
         tester,
-        const MaterialApp(
-          home: OrderDetailScreen(orderId: 'order-1', readOnlyForCadete: true),
+        _withRouter(
+          const OrderDetailScreen(orderId: 'order-1', readOnlyForCadete: true),
         ),
         overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
       );
@@ -90,7 +90,11 @@ void main() {
 
       await tester.tap(find.text('Marcar entrega'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cobrado'));
+      // "Marcar entregado" now pops back and shows a confirmation toast
+      // (order_detail_screen.dart) — needs a real GoRouter in the tree,
+      // hence _withRouter instead of the plain MaterialApp other tests in
+      // this file use.
+      await tester.tap(find.text('Pago total'));
       await tester.pumpAndSettle();
 
       final saved = await repository.getById('order-1');
