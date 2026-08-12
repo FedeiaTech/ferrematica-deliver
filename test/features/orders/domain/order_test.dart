@@ -8,6 +8,8 @@ Order _buildOrder({
   PaymentStatus paymentStatus = PaymentStatus.pendiente,
   OrderStatus status = OrderStatus.pendiente,
   double? pendingBalance,
+  double? valorEnvio,
+  double? envioPendingBalance,
 }) {
   final now = DateTime(2026, 1, 1);
   return Order(
@@ -21,6 +23,8 @@ Order _buildOrder({
     paymentStatus: paymentStatus,
     status: status,
     pendingBalance: pendingBalance,
+    valorEnvio: valorEnvio,
+    envioPendingBalance: envioPendingBalance,
   );
 }
 
@@ -257,6 +261,107 @@ void main() {
       final order = _buildOrder();
 
       expect(order.valorEnvio, isNull);
+    });
+  });
+
+  group('Order.envioPendingBalance invariant', () {
+    test('null is always valid, regardless of valorEnvio', () {
+      expect(
+        () => _buildOrder(valorEnvio: null, envioPendingBalance: null),
+        returnsNormally,
+      );
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: null),
+        returnsNormally,
+      );
+    });
+
+    test('a partial value up to and including valorEnvio is valid', () {
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: 200),
+        returnsNormally,
+      );
+      // Unlike pendingBalance, equal to the total is valid here — it
+      // represents "nothing collected on the delivery fee yet", since
+      // there's no separate payment-status flag for valorEnvio.
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: 500),
+        returnsNormally,
+      );
+    });
+
+    test('envioPendingBalance > valorEnvio throws', () {
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: 600),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('envioPendingBalance <= 0 throws', () {
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: 0),
+        throwsA(isA<AssertionError>()),
+      );
+      expect(
+        () => _buildOrder(valorEnvio: 500, envioPendingBalance: -5),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('non-null envioPendingBalance with a null valorEnvio throws', () {
+      expect(
+        () => _buildOrder(valorEnvio: null, envioPendingBalance: 60),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+  });
+
+  group('Order.envioFullyCollected', () {
+    test('true when there is no delivery fee at all', () {
+      final order = _buildOrder(valorEnvio: null);
+      expect(order.envioFullyCollected, isTrue);
+    });
+
+    test('true when the delivery fee was collected in full', () {
+      final order = _buildOrder(valorEnvio: 500, envioPendingBalance: null);
+      expect(order.envioFullyCollected, isTrue);
+    });
+
+    test('false when part of the delivery fee is still owed', () {
+      final order = _buildOrder(valorEnvio: 500, envioPendingBalance: 200);
+      expect(order.envioFullyCollected, isFalse);
+    });
+  });
+
+  group('Order.copyWith clearEnvioPendingBalance', () {
+    test('keeps the existing envioPendingBalance when not touched', () {
+      final order = _buildOrder(valorEnvio: 500, envioPendingBalance: 200);
+
+      final updated = order.copyWith(notes: 'llamar antes');
+
+      expect(updated.envioPendingBalance, 200);
+    });
+
+    test('sets a new envioPendingBalance when provided', () {
+      final order = _buildOrder(valorEnvio: 500, envioPendingBalance: 200);
+
+      final updated = order.copyWith(envioPendingBalance: 100);
+
+      expect(updated.envioPendingBalance, 100);
+    });
+
+    test('clearEnvioPendingBalance explicitly nulls the field', () {
+      final order = _buildOrder(valorEnvio: 500, envioPendingBalance: 200);
+
+      final updated = order.copyWith(clearEnvioPendingBalance: true);
+
+      expect(updated.envioPendingBalance, isNull);
+    });
+
+    test('envioPendingBalance defaults to null on construction', () {
+      final order = _buildOrder();
+
+      expect(order.envioPendingBalance, isNull);
     });
   });
 
