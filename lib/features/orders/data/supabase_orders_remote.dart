@@ -90,6 +90,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'delivery_problem': order.deliveryProblem,
     'pending_balance': order.pendingBalance,
     'valor_envio': order.valorEnvio,
+    'envio_pending_balance': order.envioPendingBalance,
   };
 
   /// Maps an `orders` row back to the domain [Order]. See [toRow].
@@ -129,6 +130,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     deliveryProblem: row['delivery_problem'] as String?,
     pendingBalance: (row['pending_balance'] as num?)?.toDouble(),
     valorEnvio: (row['valor_envio'] as num?)?.toDouble(),
+    envioPendingBalance: (row['envio_pending_balance'] as num?)?.toDouble(),
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/
