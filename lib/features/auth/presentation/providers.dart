@@ -48,3 +48,31 @@ final FutureProvider<List<CadeteProfile>> cadeteListProvider =
     FutureProvider<List<CadeteProfile>>((ref) {
       return ref.watch(cadeteDirectoryProvider).listCadetes();
     });
+
+/// Owner of the "create cadete" form's submit action (`CreateCadeteScreen`).
+/// Mirrors [LoginController]'s loading/error exposure shape so the screen
+/// can disable its submit button and surface [CadeteCreationException]
+/// messages the same way the rest of the app's forms do.
+class CreateCadeteController extends Notifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  Future<void> create({
+    required String email,
+    required String password,
+    required String nombre,
+  }) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(
+      () => ref
+          .read(cadeteDirectoryProvider)
+          .createCadete(email: email, password: password, nombre: nombre),
+    );
+  }
+}
+
+final NotifierProvider<CreateCadeteController, AsyncValue<void>>
+createCadeteControllerProvider =
+    NotifierProvider<CreateCadeteController, AsyncValue<void>>(
+      CreateCadeteController.new,
+    );

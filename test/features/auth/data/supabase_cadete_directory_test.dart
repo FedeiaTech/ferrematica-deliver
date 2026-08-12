@@ -37,6 +37,90 @@ void main() {
     });
   });
 
+  group('createCadete', () {
+    test('returns the new user id from the injected cadeteCreator', () async {
+      final directory = SupabaseCadeteDirectory(
+        MockSupabaseClient(),
+        cadeteCreator: ({required email, required password, required nombre}) async => {
+          'id': 'new-cadete-id',
+        },
+      );
+
+      final id = await directory.createCadete(
+        email: 'cadete@example.com',
+        password: 'secret123',
+        nombre: 'Juan Pérez',
+      );
+
+      expect(id, 'new-cadete-id');
+    });
+
+    test('passes email/password/nombre through to the cadeteCreator', () async {
+      String? capturedEmail;
+      String? capturedPassword;
+      String? capturedNombre;
+      final directory = SupabaseCadeteDirectory(
+        MockSupabaseClient(),
+        cadeteCreator: ({required email, required password, required nombre}) async {
+          capturedEmail = email;
+          capturedPassword = password;
+          capturedNombre = nombre;
+          return {'id': 'new-cadete-id'};
+        },
+      );
+
+      await directory.createCadete(
+        email: 'cadete@example.com',
+        password: 'secret123',
+        nombre: 'Juan Pérez',
+      );
+
+      expect(capturedEmail, 'cadete@example.com');
+      expect(capturedPassword, 'secret123');
+      expect(capturedNombre, 'Juan Pérez');
+    });
+
+    test('throws CadeteCreationException when no id is returned', () async {
+      final directory = SupabaseCadeteDirectory(
+        MockSupabaseClient(),
+        cadeteCreator: ({required email, required password, required nombre}) async => {},
+      );
+
+      expect(
+        () => directory.createCadete(
+          email: 'cadete@example.com',
+          password: 'secret123',
+          nombre: 'Juan Pérez',
+        ),
+        throwsA(isA<CadeteCreationException>()),
+      );
+    });
+
+    test('propagates CadeteCreationException thrown by the cadeteCreator', () async {
+      final directory = SupabaseCadeteDirectory(
+        MockSupabaseClient(),
+        cadeteCreator: ({required email, required password, required nombre}) async {
+          throw const CadeteCreationException('Ya existe una cuenta con ese email.');
+        },
+      );
+
+      expect(
+        () => directory.createCadete(
+          email: 'cadete@example.com',
+          password: 'secret123',
+          nombre: 'Juan Pérez',
+        ),
+        throwsA(
+          isA<CadeteCreationException>().having(
+            (error) => error.message,
+            'message',
+            'Ya existe una cuenta con ese email.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('CadeteProfile.displayName', () {
     test('falls back to id when fullName is null', () {
       const cadete = CadeteProfile(id: 'cadete-1');
