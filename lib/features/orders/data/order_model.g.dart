@@ -125,6 +125,11 @@ const OrderModelSchema = CollectionSchema(
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
+    r'valorEnvio': PropertySchema(
+      id: 22,
+      name: r'valorEnvio',
+      type: IsarType.double,
+    ),
   },
 
   estimateSize: _orderModelEstimateSize,
@@ -288,6 +293,7 @@ void _orderModelSerialize(
   writer.writeByte(offsets[19], object.status.index);
   writer.writeByte(offsets[20], object.syncStatus.index);
   writer.writeDateTime(offsets[21], object.updatedAt);
+  writer.writeDouble(offsets[22], object.valorEnvio);
 }
 
 OrderModel _orderModelDeserialize(
@@ -338,6 +344,7 @@ OrderModel _orderModelDeserialize(
         _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[20])] ??
         SyncStatus.pending,
     updatedAt: reader.readDateTime(offsets[21]),
+    valorEnvio: reader.readDoubleOrNull(offsets[22]),
   );
   return object;
 }
@@ -414,6 +421,8 @@ P _orderModelDeserializeProp<P>(
           as P;
     case 21:
       return (reader.readDateTime(offset)) as P;
+    case 22:
+      return (reader.readDoubleOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -3364,6 +3373,100 @@ extension OrderModelQueryFilter
       );
     });
   }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  valorEnvioIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'valorEnvio'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  valorEnvioIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'valorEnvio'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> valorEnvioEqualTo(
+    double? value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'valorEnvio',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  valorEnvioGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'valorEnvio',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  valorEnvioLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'valorEnvio',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> valorEnvioBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'valorEnvio',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
 }
 
 extension OrderModelQueryObject
@@ -3638,6 +3741,18 @@ extension OrderModelQuerySortBy
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByValorEnvio() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'valorEnvio', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByValorEnvioDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'valorEnvio', Sort.desc);
+    });
+  }
 }
 
 extension OrderModelQuerySortThenBy
@@ -3910,6 +4025,18 @@ extension OrderModelQuerySortThenBy
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByValorEnvio() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'valorEnvio', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByValorEnvioDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'valorEnvio', Sort.desc);
+    });
+  }
 }
 
 extension OrderModelQueryWhereDistinct
@@ -4066,6 +4193,12 @@ extension OrderModelQueryWhereDistinct
       return query.addDistinctBy(r'updatedAt');
     });
   }
+
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByValorEnvio() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'valorEnvio');
+    });
+  }
 }
 
 extension OrderModelQueryProperty
@@ -4210,6 +4343,12 @@ extension OrderModelQueryProperty
   QueryBuilder<OrderModel, DateTime, QQueryOperations> updatedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'updatedAt');
+    });
+  }
+
+  QueryBuilder<OrderModel, double?, QQueryOperations> valorEnvioProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'valorEnvio');
     });
   }
 }

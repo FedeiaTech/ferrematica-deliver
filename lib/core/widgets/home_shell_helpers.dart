@@ -11,7 +11,7 @@ Future<bool> confirmExit(BuildContext context) async {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Salir de la app'),
-      content: const Text('¿Querés salir de Ferrematica Express?'),
+      content: const Text('¿Querés salir de Ferremática Express?'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),

@@ -213,6 +213,16 @@ void main() {
       expect(find.text('Cable 2x1,5'), findsOneWidget);
       expect(find.text('Tornillos'), findsOneWidget);
 
+      // Two venta-sourced items now render as two framed blocks (taller
+      // than the old flat rows), pushing "Guardar" out of the default test
+      // viewport — the ListView virtualizes, so it isn't even built until
+      // scrolled into range (ensureVisible can't help: it requires the
+      // finder to already resolve).
+      await tester.dragUntilVisible(
+        find.widgetWithText(FilledButton, 'Guardar'),
+        find.byType(ListView),
+        const Offset(0, -200),
+      );
       await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
       await tester.pumpAndSettle();
 

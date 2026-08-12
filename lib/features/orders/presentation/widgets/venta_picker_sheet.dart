@@ -70,18 +70,14 @@ class _VentaPickerSheetContent extends ConsumerWidget {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final venta = ventas[index];
-                      final lines = venta.detalles
-                          .map((detalle) => detalle.productLabel)
-                          .join(', ');
                       return ListTile(
                         title: Text(
                           'Venta #${venta.ventaLocalId} — ${_formatFecha(venta.fecha)}',
                         ),
-                        subtitle: Text(
-                          lines.isEmpty ? 'Sin líneas' : lines,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        subtitle: venta.detalles.isEmpty
+                            ? const Text('Sin líneas')
+                            : _VentaLineasSubtitle(detalles: venta.detalles),
+                        isThreeLine: venta.detalles.length > 1,
                         trailing: Text('\$${venta.total.toStringAsFixed(2)}'),
                         onTap: () => Navigator.of(context).pop(venta),
                       );
@@ -109,5 +105,38 @@ class _VentaPickerSheetContent extends ConsumerWidget {
     final local = fecha.toLocal();
     String two(int value) => value.toString().padLeft(2, '0');
     return '${two(local.day)}/${two(local.month)} ${two(local.hour)}:${two(local.minute)}';
+  }
+}
+
+/// Comma-joined product lines for one venta's `ListTile` subtitle, same
+/// text as before except each combo line (`comboId != null`) renders in
+/// violet so a dueño can tell at a glance which lines are combos while
+/// picking a venta for shipping.
+class _VentaLineasSubtitle extends StatelessWidget {
+  const _VentaLineasSubtitle({required this.detalles});
+
+  final List<VentaDetalleDisponible> detalles;
+
+  @override
+  Widget build(BuildContext context) {
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < detalles.length; i++) {
+      final detalle = detalles[i];
+      if (i > 0) spans.add(const TextSpan(text: ', '));
+      spans.add(
+        TextSpan(
+          text: detalle.descripcion,
+          style: detalle.comboId != null
+              ? const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600)
+              : null,
+        ),
+      );
+    }
+    return Text.rich(
+      TextSpan(style: defaultStyle, children: spans),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }

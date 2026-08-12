@@ -39,7 +39,7 @@ class FerrematicaApp extends ConsumerWidget {
     ref.watch(orderSyncServiceProvider);
 
     return MaterialApp.router(
-      title: 'Ferrematica Express',
+      title: 'Ferremática Express',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       routerConfig: router,

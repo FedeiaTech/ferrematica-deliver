@@ -228,6 +228,38 @@ void main() {
     });
   });
 
+  group('Order.copyWith clearValorEnvio', () {
+    test('keeps the existing valorEnvio when not touched', () {
+      final order = _buildOrder().copyWith(valorEnvio: 500);
+
+      final updated = order.copyWith(notes: 'llamar antes');
+
+      expect(updated.valorEnvio, 500);
+    });
+
+    test('sets a new valorEnvio when provided', () {
+      final order = _buildOrder().copyWith(valorEnvio: 500);
+
+      final updated = order.copyWith(valorEnvio: 700);
+
+      expect(updated.valorEnvio, 700);
+    });
+
+    test('clearValorEnvio explicitly nulls the field', () {
+      final order = _buildOrder().copyWith(valorEnvio: 500);
+
+      final updated = order.copyWith(clearValorEnvio: true);
+
+      expect(updated.valorEnvio, isNull);
+    });
+
+    test('valorEnvio defaults to null on construction', () {
+      final order = _buildOrder();
+
+      expect(order.valorEnvio, isNull);
+    });
+  });
+
   group('Order.copyWith', () {
     test('bumps updatedAt when not explicitly provided', () async {
       final order = _buildOrder();

@@ -190,6 +190,7 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     String? clientPhone,
     String? notes,
     double? amountToCharge,
+    double? valorEnvio,
     PaymentMethod paymentMethod = PaymentMethod.efectivo,
     List<OrderItem> items = const <OrderItem>[],
     String? cityHint,
@@ -216,6 +217,7 @@ class OrdersController extends Notifier<AsyncValue<void>> {
       clientPhone: clientPhone,
       notes: notes,
       amountToCharge: amountToCharge,
+      valorEnvio: valorEnvio,
       paymentMethod: paymentMethod,
       items: items,
     );
