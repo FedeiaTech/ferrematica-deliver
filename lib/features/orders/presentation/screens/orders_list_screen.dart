@@ -70,11 +70,41 @@ class OrdersListScreen extends ConsumerWidget {
   }
 }
 
+/// [OrderStatus] values grouped for the filter menu, in display order, with
+/// a [Divider] rendered between (not within) each group — see
+/// `_StatusFilterMenu.build`:
+/// 1. Pendientes — not yet delivered, whether or not a real cadete has
+///    taken it over (`asignado` covers both the dueño's own default
+///    self-assignment and a genuine handoff; [orderShowOnlyUnassignedProvider]
+///    already distinguishes those two cases as a separate toggle below).
+/// 2. Pendientes de cobro y completados — `entregado` covers both: whether
+///    the charge was collected is [Order.paymentStatus], a field the status
+///    filter doesn't slice by, so this group has a single checkbox.
+/// 3. Cancelados — terminal, unrelated to payment or assignment.
+const List<List<OrderStatus>> _statusGroups = <List<OrderStatus>>[
+  <OrderStatus>[OrderStatus.pendiente, OrderStatus.asignado, OrderStatus.enCamino],
+  <OrderStatus>[OrderStatus.entregado],
+  <OrderStatus>[OrderStatus.cancelado],
+];
+
 /// Status filter as a multi-select contextual menu: every checkbox applies
 /// immediately (no "apply" step) and toggling "Todos" is a shortcut for
 /// selecting/deselecting every individual status at once. Replaces the
 /// previous single-select filter chips — the dueño can now show e.g.
 /// "Pendiente" and "Asignado" together instead of one status at a time.
+///
+/// Statuses are grouped into [_statusGroups] (pendientes → pendientes de
+/// cobro y completados → cancelados), each section separated by a
+/// [Divider], instead of one flat list.
+///
+/// [OrdersListScreen] is currently only reachable from `DuenoHomeScreen`
+/// (the cadete's equivalent, `CadeteOrdersScreen`, has no status filter at
+/// all — `cadeteOrdersProvider` already scopes it to the cadete's own
+/// orders). So there is no cadete-only "assigned to me" restriction filter
+/// here to gate behind `session.rol == UserRole.cadete` today; if one is
+/// ever added to this menu, follow the same `session.rol` pattern
+/// `DeliveryStatsScreen` uses so the dueño keeps seeing every status
+/// unrestricted, as today.
 class _StatusFilterMenu extends ConsumerWidget {
   const _StatusFilterMenu({required this.selected, required this.onlyUnassigned});
 
@@ -123,22 +153,25 @@ class _StatusFilterMenu extends ConsumerWidget {
           closeOnActivate: false,
           child: const Text('Todos'),
         ),
-        const Divider(height: 1),
-        for (final status in OrderStatus.values)
-          CheckboxMenuButton(
-            value: selected.contains(status),
-            onChanged: (checked) {
-              final next = {...selected};
-              if (checked ?? false) {
-                next.add(status);
-              } else {
-                next.remove(status);
-              }
-              setFilter(next);
-            },
-            closeOnActivate: false,
-            child: Text(orderStatusLabel(status)),
-          ),
+        for (final group in _statusGroups)
+          ...[
+            const Divider(height: 1),
+            for (final status in group)
+              CheckboxMenuButton(
+                value: selected.contains(status),
+                onChanged: (checked) {
+                  final next = {...selected};
+                  if (checked ?? false) {
+                    next.add(status);
+                  } else {
+                    next.remove(status);
+                  }
+                  setFilter(next);
+                },
+                closeOnActivate: false,
+                child: Text(orderStatusLabel(status)),
+              ),
+          ],
         const Divider(height: 1),
         CheckboxMenuButton(
           value: onlyUnassigned,

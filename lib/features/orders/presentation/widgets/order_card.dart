@@ -86,10 +86,26 @@ class OrderCard extends ConsumerWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: order.amountToCharge != null
-              ? Text(
-                  '\$${order.amountToCharge!.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+          trailing: order.amountToCharge != null || order.needsPaymentFollowUp
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (order.amountToCharge != null)
+                      Text(
+                        '\$${order.amountToCharge!.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    if (order.needsPaymentFollowUp)
+                      Tooltip(
+                        message: 'Cobro pendiente',
+                        child: Icon(
+                          Icons.money_off_outlined,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                  ],
                 )
               : null,
           subtitle: Column(
@@ -144,15 +160,6 @@ class OrderCard extends ConsumerWidget {
                 spacing: 4,
                 runSpacing: 4,
                 children: [
-                  if (order.needsPaymentFollowUp)
-                    Tooltip(
-                      message: 'Cobro pendiente',
-                      child: Icon(
-                        Icons.money_off_outlined,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
                   if (order.isIncomplete) const IncompleteBadge(),
                   SyncStatusChip(status: order.syncStatus),
                 ],
