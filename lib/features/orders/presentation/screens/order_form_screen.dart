@@ -263,6 +263,20 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
+        // Subtract every picked venta's total back out of the amount field
+        // (mirroring `_removeVenta`'s per-venta subtraction) before wiping
+        // the venta bookkeeping — otherwise the dueño is left staring at an
+        // empty item list with a stale non-zero charge still in the field.
+        final clearedTotal = _ventaTotales.values.fold<double>(
+          0,
+          (sum, total) => sum + total,
+        );
+        if (clearedTotal > 0) {
+          final currentAmount =
+              double.tryParse(_amountController.text.trim()) ?? 0;
+          final updated = currentAmount - clearedTotal;
+          _amountController.text = updated <= 0 ? '' : updated.toString();
+        }
         _selectedVentaIds.clear();
         _ventaFechas.clear();
         _ventaTotales.clear();

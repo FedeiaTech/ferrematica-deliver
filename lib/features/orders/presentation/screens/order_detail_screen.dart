@@ -337,14 +337,28 @@ class _OrderDetailBody extends ConsumerWidget {
     );
   }
 
-  /// Parses a comma-or-dot amount and returns the step-2 refusal message,
-  /// or `null` if [raw] is a valid partial-payment amount (design DA6): a
-  /// blank/unparseable value, `<= 0` (use "Cobro pendiente" instead), or
-  /// `>= total` (use "Pago total" instead) are all refused. Every refusal
-  /// keeps the confirm button disabled and the user in step 2 — nothing is
-  /// ever clamped.
-  static String? _partialAmountRefusal(String raw, double total) {
+  /// Parses a comma-or-dot amount, rounded to cents (2 decimals) — the same
+  /// rounding [_PartialPaymentStep] applies before computing the resulting
+  /// `pendingBalance` — so an entry like `99.999` on a `$100` total is
+  /// evaluated as the `$100.00` it rounds to, not the `$99.999` the user
+  /// typed. Without this, such a value passed the old unrounded `< total`
+  /// check but rounded down to a `pendingBalance` of exactly `0.0`,
+  /// violating `Order`'s `pendingBalance > 0` invariant. Returns `null` if
+  /// [raw] doesn't parse.
+  static double? _parseRoundedAmount(String raw) {
     final value = double.tryParse(raw.trim().replaceAll(',', '.'));
+    if (value == null) return null;
+    return double.parse(value.toStringAsFixed(2));
+  }
+
+  /// Returns the step-2 refusal message, or `null` if [raw] is a valid
+  /// partial-payment amount (design DA6): a blank/unparseable value, `<= 0`
+  /// (use "Cobro pendiente" instead), or `>= total` once rounded to cents
+  /// (use "Pago total" instead) are all refused. Every refusal keeps the
+  /// confirm button disabled and the user in step 2 — nothing is ever
+  /// clamped.
+  static String? _partialAmountRefusal(String raw, double total) {
+    final value = _parseRoundedAmount(raw);
     if (value == null) return 'Ingresá un monto válido';
     if (value <= 0) return 'El monto debe ser mayor a 0 — usá «Cobro pendiente»';
     if (value >= total) return 'Ese es el total — usá «Pago total»';
@@ -1043,9 +1057,9 @@ class _PartialPaymentStep extends StatelessWidget {
                           ? () => onConfirm(
                               double.parse(
                                 (total -
-                                        double.parse(
-                                          rawText.trim().replaceAll(',', '.'),
-                                        ))
+                                        _OrderDetailBody._parseRoundedAmount(
+                                          rawText,
+                                        )!)
                                     .toStringAsFixed(2),
                               ),
                             )
