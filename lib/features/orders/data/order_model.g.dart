@@ -67,66 +67,71 @@ const OrderModelSchema = CollectionSchema(
       name: r'deliveryProblem',
       type: IsarType.string,
     ),
-    r'id': PropertySchema(id: 10, name: r'id', type: IsarType.string),
+    r'envioPendingBalance': PropertySchema(
+      id: 10,
+      name: r'envioPendingBalance',
+      type: IsarType.double,
+    ),
+    r'id': PropertySchema(id: 11, name: r'id', type: IsarType.string),
     r'items': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'items',
       type: IsarType.objectList,
 
       target: r'OrderItemModel',
     ),
     r'latitude': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'latitude',
       type: IsarType.double,
     ),
     r'longitude': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'longitude',
       type: IsarType.double,
     ),
-    r'notes': PropertySchema(id: 14, name: r'notes', type: IsarType.string),
+    r'notes': PropertySchema(id: 15, name: r'notes', type: IsarType.string),
     r'paymentMethod': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'paymentMethod',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentMethodEnumValueMap,
     ),
     r'paymentStatus': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'paymentStatus',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentStatusEnumValueMap,
     ),
     r'pendingBalance': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'pendingBalance',
       type: IsarType.double,
     ),
     r'resolvedCity': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'resolvedCity',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'status',
       type: IsarType.byte,
       enumMap: _OrderModelstatusEnumValueMap,
     ),
     r'syncStatus': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'syncStatus',
       type: IsarType.byte,
       enumMap: _OrderModelsyncStatusEnumValueMap,
     ),
     r'updatedAt': PropertySchema(
-      id: 21,
+      id: 22,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'valorEnvio': PropertySchema(
-      id: 22,
+      id: 23,
       name: r'valorEnvio',
       type: IsarType.double,
     ),
@@ -276,24 +281,25 @@ void _orderModelSerialize(
   writer.writeDateTime(offsets[7], object.deliveredAt);
   writer.writeString(offsets[8], object.deliveryAddress);
   writer.writeString(offsets[9], object.deliveryProblem);
-  writer.writeString(offsets[10], object.id);
+  writer.writeDouble(offsets[10], object.envioPendingBalance);
+  writer.writeString(offsets[11], object.id);
   writer.writeObjectList<OrderItemModel>(
-    offsets[11],
+    offsets[12],
     allOffsets,
     OrderItemModelSchema.serialize,
     object.items,
   );
-  writer.writeDouble(offsets[12], object.latitude);
-  writer.writeDouble(offsets[13], object.longitude);
-  writer.writeString(offsets[14], object.notes);
-  writer.writeByte(offsets[15], object.paymentMethod.index);
-  writer.writeByte(offsets[16], object.paymentStatus.index);
-  writer.writeDouble(offsets[17], object.pendingBalance);
-  writer.writeString(offsets[18], object.resolvedCity);
-  writer.writeByte(offsets[19], object.status.index);
-  writer.writeByte(offsets[20], object.syncStatus.index);
-  writer.writeDateTime(offsets[21], object.updatedAt);
-  writer.writeDouble(offsets[22], object.valorEnvio);
+  writer.writeDouble(offsets[13], object.latitude);
+  writer.writeDouble(offsets[14], object.longitude);
+  writer.writeString(offsets[15], object.notes);
+  writer.writeByte(offsets[16], object.paymentMethod.index);
+  writer.writeByte(offsets[17], object.paymentStatus.index);
+  writer.writeDouble(offsets[18], object.pendingBalance);
+  writer.writeString(offsets[19], object.resolvedCity);
+  writer.writeByte(offsets[20], object.status.index);
+  writer.writeByte(offsets[21], object.syncStatus.index);
+  writer.writeDateTime(offsets[22], object.updatedAt);
+  writer.writeDouble(offsets[23], object.valorEnvio);
 }
 
 OrderModel _orderModelDeserialize(
@@ -313,38 +319,39 @@ OrderModel _orderModelDeserialize(
     deliveredAt: reader.readDateTimeOrNull(offsets[7]),
     deliveryAddress: reader.readString(offsets[8]),
     deliveryProblem: reader.readStringOrNull(offsets[9]),
-    id: reader.readString(offsets[10]),
+    envioPendingBalance: reader.readDoubleOrNull(offsets[10]),
+    id: reader.readString(offsets[11]),
     items:
         reader.readObjectList<OrderItemModel>(
-          offsets[11],
+          offsets[12],
           OrderItemModelSchema.deserialize,
           allOffsets,
           OrderItemModel(),
         ) ??
         const <OrderItemModel>[],
-    latitude: reader.readDoubleOrNull(offsets[12]),
-    longitude: reader.readDoubleOrNull(offsets[13]),
-    notes: reader.readStringOrNull(offsets[14]),
+    latitude: reader.readDoubleOrNull(offsets[13]),
+    longitude: reader.readDoubleOrNull(offsets[14]),
+    notes: reader.readStringOrNull(offsets[15]),
     paymentMethod:
         _OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
-          offsets[15],
+          offsets[16],
         )] ??
         PaymentMethod.sinDefinir,
     paymentStatus:
         _OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
-          offsets[16],
+          offsets[17],
         )] ??
         PaymentStatus.pendiente,
-    pendingBalance: reader.readDoubleOrNull(offsets[17]),
-    resolvedCity: reader.readStringOrNull(offsets[18]),
+    pendingBalance: reader.readDoubleOrNull(offsets[18]),
+    resolvedCity: reader.readStringOrNull(offsets[19]),
     status:
-        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[19])] ??
+        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[20])] ??
         OrderStatus.pendiente,
     syncStatus:
-        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[20])] ??
+        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[21])] ??
         SyncStatus.pending,
-    updatedAt: reader.readDateTime(offsets[21]),
-    valorEnvio: reader.readDoubleOrNull(offsets[22]),
+    updatedAt: reader.readDateTime(offsets[22]),
+    valorEnvio: reader.readDoubleOrNull(offsets[23]),
   );
   return object;
 }
@@ -377,8 +384,10 @@ P _orderModelDeserializeProp<P>(
     case 9:
       return (reader.readStringOrNull(offset)) as P;
     case 10:
-      return (reader.readString(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 11:
+      return (reader.readString(offset)) as P;
+    case 12:
       return (reader.readObjectList<OrderItemModel>(
                 offset,
                 OrderItemModelSchema.deserialize,
@@ -387,41 +396,41 @@ P _orderModelDeserializeProp<P>(
               ) ??
               const <OrderItemModel>[])
           as P;
-    case 12:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 13:
       return (reader.readDoubleOrNull(offset)) as P;
     case 14:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 15:
+      return (reader.readStringOrNull(offset)) as P;
+    case 16:
       return (_OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentMethod.sinDefinir)
           as P;
-    case 16:
+    case 17:
       return (_OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentStatus.pendiente)
           as P;
-    case 17:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 18:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 19:
+      return (reader.readStringOrNull(offset)) as P;
+    case 20:
       return (_OrderModelstatusValueEnumMap[reader.readByteOrNull(offset)] ??
               OrderStatus.pendiente)
           as P;
-    case 20:
+    case 21:
       return (_OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               SyncStatus.pending)
           as P;
-    case 21:
-      return (reader.readDateTime(offset)) as P;
     case 22:
+      return (reader.readDateTime(offset)) as P;
+    case 23:
       return (reader.readDoubleOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2236,6 +2245,99 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'envioPendingBalance'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'envioPendingBalance'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceEqualTo(double? value, {double epsilon = Query.epsilon}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'envioPendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'envioPendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'envioPendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  envioPendingBalanceBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'envioPendingBalance',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> idEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -3609,6 +3711,20 @@ extension OrderModelQuerySortBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByEnvioPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'envioPendingBalance', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByEnvioPendingBalanceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'envioPendingBalance', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -3881,6 +3997,20 @@ extension OrderModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByEnvioPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'envioPendingBalance', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByEnvioPendingBalanceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'envioPendingBalance', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -4122,6 +4252,13 @@ extension OrderModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QDistinct>
+  distinctByEnvioPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'envioPendingBalance');
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctById({
     bool caseSensitive = true,
   }) {
@@ -4268,6 +4405,13 @@ extension OrderModelQueryProperty
   deliveryProblemProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'deliveryProblem');
+    });
+  }
+
+  QueryBuilder<OrderModel, double?, QQueryOperations>
+  envioPendingBalanceProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'envioPendingBalance');
     });
   }
 

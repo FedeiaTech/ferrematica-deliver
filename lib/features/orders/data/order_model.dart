@@ -38,6 +38,7 @@ class OrderModel {
     this.deliveryProblem,
     this.pendingBalance,
     this.valorEnvio,
+    this.envioPendingBalance,
   });
 
   Id get isarId => fastHash(id);
@@ -87,6 +88,11 @@ class OrderModel {
   /// Mirrors [Order.valorEnvio]. Purely additive nullable property — no
   /// `@enumerated`, no schema-version bump, same shape as [pendingBalance].
   final double? valorEnvio;
+
+  /// Mirrors [Order.envioPendingBalance]. Purely additive nullable
+  /// property — no `@enumerated`, no schema-version bump, same shape as
+  /// [pendingBalance]/[valorEnvio].
+  final double? envioPendingBalance;
 }
 
 /// Embedded line item — part of the [OrderModel] row itself, not a separate
@@ -135,6 +141,7 @@ OrderModel orderToModel(Order order) {
     deliveryProblem: order.deliveryProblem,
     pendingBalance: order.pendingBalance,
     valorEnvio: order.valorEnvio,
+    envioPendingBalance: order.envioPendingBalance,
   );
 }
 
@@ -172,6 +179,7 @@ Order orderModelToDomain(OrderModel model) {
     deliveryProblem: model.deliveryProblem,
     pendingBalance: model.pendingBalance,
     valorEnvio: model.valorEnvio,
+    envioPendingBalance: model.envioPendingBalance,
   );
 }
 

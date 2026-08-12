@@ -99,6 +99,7 @@ final class Order {
     this.deliveryProblem,
     this.pendingBalance,
     this.valorEnvio,
+    this.envioPendingBalance,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
@@ -110,6 +111,11 @@ final class Order {
                  amountToCharge != null &&
                  pendingBalance < amountToCharge),
          'pendingBalance must be null, or a strict partial of amountToCharge on a cobrado order',
+       ),
+       assert(
+         envioPendingBalance == null ||
+             (valorEnvio != null && envioPendingBalance > 0 && envioPendingBalance <= valorEnvio),
+         'envioPendingBalance must be null, or a partial (up to and including the full amount) of valorEnvio',
        );
 
   final String id;
@@ -158,9 +164,26 @@ final class Order {
   /// "el valor total no es necesario registrarlo en la factura").
   final double? valorEnvio;
 
+  /// Amount still owed on [valorEnvio] after a partial (or nil) collection
+  /// of the delivery fee. `null` means either there's no delivery fee at
+  /// all ([valorEnvio] is `null`), or it was collected in full. When
+  /// non-null, it is between `0` (exclusive) and [valorEnvio] (inclusive)
+  /// — enforced by the constructor assert above and by the
+  /// `orders_envio_pending_balance_valido` CHECK constraint in Supabase.
+  /// Unlike [pendingBalance], the upper bound is inclusive: there is no
+  /// separate "pendiente" status for the delivery fee, so "nothing
+  /// collected yet" is represented as `envioPendingBalance == valorEnvio`.
+  final double? envioPendingBalance;
+
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
       amountToCharge == null || paymentMethod == PaymentMethod.sinDefinir;
+
+  /// True when the delivery fee is either absent or fully collected — i.e.
+  /// there is nothing still owed on [valorEnvio]. Drives the "Envíos" stat
+  /// in `delivery_stats_screen.dart`, which must only count a fee once it's
+  /// actually in hand.
+  bool get envioFullyCollected => valorEnvio == null || envioPendingBalance == null;
 
   /// True when the order was marked delivered but money is still owed —
   /// either nothing was collected yet, or only part of it was. Drives the
@@ -181,9 +204,11 @@ final class Order {
   /// pointing at a place that no longer matches [deliveryAddress]) and
   /// [assignedCadeteId] when [clearAssignedCadeteId] is `true` (needed for
   /// [OrdersController.unassignCadete] to send an order back to `pendiente`
-  /// with no one on the hook for it) and [pendingBalance] when
+  /// with no one on the hook for it), [pendingBalance] when
   /// [clearPendingBalance] is `true` (needed to mark a partial payment as
-  /// fully collected without leaving the old balance behind).
+  /// fully collected without leaving the old balance behind), and
+  /// [envioPendingBalance] when [clearEnvioPendingBalance] is `true` (same
+  /// need, but for the delivery fee).
   Order copyWith({
     String? deliveryAddress,
     double? latitude,
@@ -209,6 +234,8 @@ final class Order {
     bool clearPendingBalance = false,
     double? valorEnvio,
     bool clearValorEnvio = false,
+    double? envioPendingBalance,
+    bool clearEnvioPendingBalance = false,
   }) {
     return Order(
       id: id,
@@ -236,6 +263,9 @@ final class Order {
       deliveryProblem: deliveryProblem ?? this.deliveryProblem,
       pendingBalance: clearPendingBalance ? null : (pendingBalance ?? this.pendingBalance),
       valorEnvio: clearValorEnvio ? null : (valorEnvio ?? this.valorEnvio),
+      envioPendingBalance: clearEnvioPendingBalance
+          ? null
+          : (envioPendingBalance ?? this.envioPendingBalance),
     );
   }
 }
