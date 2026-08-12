@@ -91,6 +91,16 @@ class _StatsBody extends StatelessWidget {
 
         if (!deliveredAt.isBefore(periodStart)) {
           stats.delivered++;
+          // Credit only the portion of the delivery fee actually collected
+          // — a non-null `envioPendingBalance` means part of it is still
+          // owed, so subtract it rather than gating the whole amount out
+          // (that would undercount a genuine partial collection as $0).
+          // Mirrors the products-side partial handling below. Legacy rows
+          // (no `envioPendingBalance` column value, i.e. `null`) count in
+          // full, preserving pre-existing behavior.
+          if (order.valorEnvio != null) {
+            stats.envioTotal += order.valorEnvio! - (order.envioPendingBalance ?? 0);
+          }
           if (order.paymentStatus == PaymentStatus.cobrado) {
             // DA5: a `cobrado` order can still carry a non-null
             // `pendingBalance` (a partial collection) — crediting the full
@@ -134,7 +144,7 @@ class _StatsBody extends StatelessWidget {
     }
 
     String nameFor(String id) {
-      if (id == ownUserId) return isDueno ? 'Base (vos)' : 'Vos';
+      if (id == ownUserId) return isDueno ? 'Base' : 'Vos';
       return cadetesAsync.maybeWhen(
         data: (cadetes) {
           for (final cadete in cadetes) {
@@ -183,7 +193,7 @@ class _StatsBody extends StatelessWidget {
             child: Text('Todavía no hay entregas registradas en este período.'),
           ),
         for (final id in sortedIds) ...[
-          _StatsCard(title: nameFor(id), stats: byAssignee[id] ?? _AssigneeStats()),
+          _StatsCard(title: 'Envíos de ${nameFor(id)}', stats: byAssignee[id] ?? _AssigneeStats()),
           const SizedBox(height: 8),
           _DeliveredBarChart(
             period: period,
@@ -211,6 +221,11 @@ class _AssigneeStats {
   double amountCollected = 0;
   int pendingPaymentCount = 0;
   double pendingPaymentAmount = 0;
+
+  /// Sum of `Order.valorEnvio` across delivered orders in the period — the
+  /// cadete keeps 100% of this (no company cut to net out, per design), so
+  /// this is purely a "quién y cuánto" record, not a profit figure.
+  double envioTotal = 0;
 }
 
 /// Which chart bucket a delivered order's `deliveredAt` falls into, given
@@ -287,14 +302,35 @@ class _StatsCard extends StatelessWidget {
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
               children: [
-                _StatValue(label: 'Entregados', value: '${stats.delivered}'),
+                _StatValue(label: 'Productos entregados', value: '${stats.delivered}'),
                 _StatValue(label: 'Cancelados', value: '${stats.cancelledOrProblem}'),
+                // Products-only portion of what's been collected — includes
+                // partial collections (a `cobrado` order can still carry a
+                // non-null `pendingBalance`, see DA5 above), never
+                // `valorEnvio`. Renamed from "Cobrado" to "Productos" so it
+                // reads unambiguously next to the new "Total cobrado" figure
+                // below, which folds `valorEnvio` back in.
                 _StatValue(
-                  label: 'Cobrado',
+                  label: 'Productos',
                   value: '\$${stats.amountCollected.toStringAsFixed(2)}',
+                ),
+                _StatValue(
+                  label: 'Envíos',
+                  value: '\$${stats.envioTotal.toStringAsFixed(2)}',
+                ),
+                // Everything actually collected across both categories:
+                // products (partial-aware, [_AssigneeStats.amountCollected])
+                // plus cadetería (also partial-aware via
+                // `Order.envioPendingBalance`/[_AssigneeStats.envioTotal] —
+                // see the gating above, same shape as the products side).
+                _StatValue(
+                  label: 'Total cobrado',
+                  value:
+                      '\$${(stats.amountCollected + stats.envioTotal).toStringAsFixed(2)}',
                 ),
               ],
             ),
@@ -402,7 +438,7 @@ class _DeliveredBarChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Entregados — ${_periodLabel(period)}', style: Theme.of(context).textTheme.labelLarge),
+            Text('Productos entregados — ${_periodLabel(period)}', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 12),
             // Centered when the bars fit the available width, scrollable
             // (left-anchored, same as before) once they don't — the
