@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'venta_disponible.dart';
@@ -198,6 +199,19 @@ class SupabaseVentasRemote implements VentasRemote {
         .from(_ventasTable)
         .select('id, venta_local_id, install_id, fecha, total, estado')
         .inFilter('id', ventaIds);
+    if (ventas.length < ventaIds.length) {
+      // A `venta_order_links` row survived but its `ventas` counterpart
+      // didn't come back (RLS mismatch, or the row is otherwise no longer
+      // visible) — distinct from the legitimate `estado == 'anulada'` case
+      // already handled by callers. Not surfaced in the UI (that's a
+      // separate scope decision), but must not be swallowed silently.
+      debugPrint(
+        'fetchLinkedVentas($orderId): expected ${ventaIds.length} ventas '
+        'from $_linksTable, got ${ventas.length} — '
+        '${ventaIds.length - ventas.length} link(s) point to a venta row '
+        'not visible to this caller.',
+      );
+    }
     return ventas
         .map(
           (row) => LinkedVenta(
