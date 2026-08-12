@@ -92,7 +92,20 @@ class _StatsBody extends StatelessWidget {
         if (!deliveredAt.isBefore(periodStart)) {
           stats.delivered++;
           if (order.paymentStatus == PaymentStatus.cobrado) {
-            if (order.amountToCharge != null) stats.amountCollected += order.amountToCharge!;
+            // DA5: a `cobrado` order can still carry a non-null
+            // `pendingBalance` (a partial collection) — crediting the full
+            // `amountToCharge` here would silently misreport it as fully
+            // collected. Credit only what was actually collected, and
+            // surface the still-owed portion the same way a `pendiente`
+            // order does below.
+            final pending = order.pendingBalance;
+            if (order.amountToCharge != null) {
+              stats.amountCollected += order.amountToCharge! - (pending ?? 0);
+            }
+            if (pending != null) {
+              stats.pendingPaymentCount++;
+              stats.pendingPaymentAmount += pending;
+            }
           } else {
             stats.pendingPaymentCount++;
             if (order.amountToCharge != null) stats.pendingPaymentAmount += order.amountToCharge!;
