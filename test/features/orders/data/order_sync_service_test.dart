@@ -186,8 +186,14 @@ void main() {
       verify(() => remote.upsert(order)).called(1);
     });
 
-    test('a "none" connectivity event does not trigger a drain', () async {
+    test('a "none" connectivity event does not trigger an additional drain', () async {
+      // `start()` itself fires an initial cold-start drain — let that
+      // settle and reset call tracking before asserting on the event under
+      // test, so this only verifies the "none" event's own effect.
       service.start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      clearInteractions(repository);
+
       connectivityController.add(<ConnectivityResult>[ConnectivityResult.none]);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 

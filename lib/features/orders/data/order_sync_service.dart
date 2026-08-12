@@ -63,6 +63,7 @@ class OrderSyncService with WidgetsBindingObserver {
         unawaited(drain());
       }
     });
+    unawaited(drain());
   }
 
   /// Stops all listeners. Call from a provider's `ref.onDispose`.
