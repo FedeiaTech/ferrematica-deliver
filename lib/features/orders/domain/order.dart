@@ -34,15 +34,27 @@ enum SyncStatus { pending, synced, failed }
 /// A single line item embedded in an [Order]. Not a separate entity/table —
 /// see design decision on embedded items vs. an `order_items` table.
 final class OrderItem {
-  const OrderItem({required this.productName, required this.quantity});
+  const OrderItem({
+    required this.productName,
+    required this.quantity,
+    this.sourceVentaId,
+  });
 
   final String productName;
   final int quantity;
+
+  /// The `ventas.id` this line was prefilled from via `_pickVenta`
+  /// (order_form_screen.dart), or `null` for a manually-added/free-form
+  /// line. A venta-sourced item mirrors an actual completed POS sale, so
+  /// the order form locks its quantity/removal controls when this is set —
+  /// only a manual line stays freely editable.
+  final String? sourceVentaId;
 
   OrderItem copyWith({String? productName, int? quantity}) {
     return OrderItem(
       productName: productName ?? this.productName,
       quantity: quantity ?? this.quantity,
+      sourceVentaId: sourceVentaId,
     );
   }
 
@@ -51,11 +63,12 @@ final class OrderItem {
     if (identical(this, other)) return true;
     return other is OrderItem &&
         other.productName == productName &&
-        other.quantity == quantity;
+        other.quantity == quantity &&
+        other.sourceVentaId == sourceVentaId;
   }
 
   @override
-  int get hashCode => Object.hash(productName, quantity);
+  int get hashCode => Object.hash(productName, quantity, sourceVentaId);
 }
 
 /// The order aggregate. Only [deliveryAddress] is required; every other
@@ -84,9 +97,18 @@ final class Order {
     this.deliveredAt,
     this.deletedAt,
     this.deliveryProblem,
+    this.pendingBalance,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
+       ),
+       assert(
+         pendingBalance == null ||
+             (paymentStatus == PaymentStatus.cobrado &&
+                 pendingBalance > 0 &&
+                 amountToCharge != null &&
+                 pendingBalance < amountToCharge),
+         'pendingBalance must be null, or a strict partial of amountToCharge on a cobrado order',
        );
 
   final String id;
@@ -120,14 +142,23 @@ final class Order {
   /// hasn't had a delivery problem reported against it.
   final String? deliveryProblem;
 
+  /// Amount still owed on a `cobrado` order after a partial collection.
+  /// `null` means either the order isn't `cobrado` yet, or it was
+  /// collected in full. When non-null, it is strictly between `0` and
+  /// [amountToCharge] — enforced by the constructor assert below and by
+  /// the `orders_pending_balance_valido` CHECK constraint in Supabase.
+  final double? pendingBalance;
+
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
       amountToCharge == null || paymentMethod == PaymentMethod.sinDefinir;
 
-  /// True when the order was marked delivered but the charge is still
-  /// pending — this drives the dueño-facing alert banner.
+  /// True when the order was marked delivered but money is still owed —
+  /// either nothing was collected yet, or only part of it was. Drives the
+  /// dueño-facing alert banner and follow-up counters.
   bool get needsPaymentFollowUp =>
-      status == OrderStatus.entregado && paymentStatus == PaymentStatus.pendiente;
+      (status == OrderStatus.entregado && paymentStatus == PaymentStatus.pendiente) ||
+      pendingBalance != null;
 
   /// Returns a copy of this order with the given fields replaced.
   /// [updatedAt] always advances to `DateTime.now()` (or [updatedAt] if
@@ -141,7 +172,9 @@ final class Order {
   /// pointing at a place that no longer matches [deliveryAddress]) and
   /// [assignedCadeteId] when [clearAssignedCadeteId] is `true` (needed for
   /// [OrdersController.unassignCadete] to send an order back to `pendiente`
-  /// with no one on the hook for it).
+  /// with no one on the hook for it) and [pendingBalance] when
+  /// [clearPendingBalance] is `true` (needed to mark a partial payment as
+  /// fully collected without leaving the old balance behind).
   Order copyWith({
     String? deliveryAddress,
     double? latitude,
@@ -163,6 +196,8 @@ final class Order {
     DateTime? deliveredAt,
     DateTime? deletedAt,
     String? deliveryProblem,
+    double? pendingBalance,
+    bool clearPendingBalance = false,
   }) {
     return Order(
       id: id,
@@ -188,6 +223,7 @@ final class Order {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deliveryProblem: deliveryProblem ?? this.deliveryProblem,
+      pendingBalance: clearPendingBalance ? null : (pendingBalance ?? this.pendingBalance),
     );
   }
 }

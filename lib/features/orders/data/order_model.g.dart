@@ -98,25 +98,30 @@ const OrderModelSchema = CollectionSchema(
       type: IsarType.byte,
       enumMap: _OrderModelpaymentStatusEnumValueMap,
     ),
-    r'resolvedCity': PropertySchema(
+    r'pendingBalance': PropertySchema(
       id: 17,
+      name: r'pendingBalance',
+      type: IsarType.double,
+    ),
+    r'resolvedCity': PropertySchema(
+      id: 18,
       name: r'resolvedCity',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'status',
       type: IsarType.byte,
       enumMap: _OrderModelstatusEnumValueMap,
     ),
     r'syncStatus': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'syncStatus',
       type: IsarType.byte,
       enumMap: _OrderModelsyncStatusEnumValueMap,
     ),
     r'updatedAt': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
@@ -278,10 +283,11 @@ void _orderModelSerialize(
   writer.writeString(offsets[14], object.notes);
   writer.writeByte(offsets[15], object.paymentMethod.index);
   writer.writeByte(offsets[16], object.paymentStatus.index);
-  writer.writeString(offsets[17], object.resolvedCity);
-  writer.writeByte(offsets[18], object.status.index);
-  writer.writeByte(offsets[19], object.syncStatus.index);
-  writer.writeDateTime(offsets[20], object.updatedAt);
+  writer.writeDouble(offsets[17], object.pendingBalance);
+  writer.writeString(offsets[18], object.resolvedCity);
+  writer.writeByte(offsets[19], object.status.index);
+  writer.writeByte(offsets[20], object.syncStatus.index);
+  writer.writeDateTime(offsets[21], object.updatedAt);
 }
 
 OrderModel _orderModelDeserialize(
@@ -323,14 +329,15 @@ OrderModel _orderModelDeserialize(
           offsets[16],
         )] ??
         PaymentStatus.pendiente,
-    resolvedCity: reader.readStringOrNull(offsets[17]),
+    pendingBalance: reader.readDoubleOrNull(offsets[17]),
+    resolvedCity: reader.readStringOrNull(offsets[18]),
     status:
-        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[18])] ??
+        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[19])] ??
         OrderStatus.pendiente,
     syncStatus:
-        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[19])] ??
+        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[20])] ??
         SyncStatus.pending,
-    updatedAt: reader.readDateTime(offsets[20]),
+    updatedAt: reader.readDateTime(offsets[21]),
   );
   return object;
 }
@@ -392,18 +399,20 @@ P _orderModelDeserializeProp<P>(
               PaymentStatus.pendiente)
           as P;
     case 17:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 18:
+      return (reader.readStringOrNull(offset)) as P;
+    case 19:
       return (_OrderModelstatusValueEnumMap[reader.readByteOrNull(offset)] ??
               OrderStatus.pendiente)
           as P;
-    case 19:
+    case 20:
       return (_OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               SyncStatus.pending)
           as P;
-    case 20:
+    case 21:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2934,6 +2943,99 @@ extension OrderModelQueryFilter
   }
 
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'pendingBalance'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'pendingBalance'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceEqualTo(double? value, {double epsilon = Query.epsilon}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'pendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceGreaterThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'pendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceLessThan(
+    double? value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'pendingBalance',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  pendingBalanceBetween(
+    double? lower,
+    double? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'pendingBalance',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
   resolvedCityIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -3476,6 +3578,19 @@ extension OrderModelQuerySortBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pendingBalance', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByPendingBalanceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pendingBalance', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByResolvedCity() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'resolvedCity', Sort.asc);
@@ -3735,6 +3850,19 @@ extension OrderModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pendingBalance', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByPendingBalanceDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'pendingBalance', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByResolvedCity() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'resolvedCity', Sort.asc);
@@ -3907,6 +4035,12 @@ extension OrderModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByPendingBalance() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'pendingBalance');
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByResolvedCity({
     bool caseSensitive = true,
   }) {
@@ -4049,6 +4183,12 @@ extension OrderModelQueryProperty
     });
   }
 
+  QueryBuilder<OrderModel, double?, QQueryOperations> pendingBalanceProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'pendingBalance');
+    });
+  }
+
   QueryBuilder<OrderModel, String?, QQueryOperations> resolvedCityProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'resolvedCity');
@@ -4091,6 +4231,11 @@ const OrderItemModelSchema = Schema(
       type: IsarType.string,
     ),
     r'quantity': PropertySchema(id: 1, name: r'quantity', type: IsarType.long),
+    r'sourceVentaId': PropertySchema(
+      id: 2,
+      name: r'sourceVentaId',
+      type: IsarType.string,
+    ),
   },
 
   estimateSize: _orderItemModelEstimateSize,
@@ -4106,6 +4251,12 @@ int _orderItemModelEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.productName.length * 3;
+  {
+    final value = object.sourceVentaId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -4117,6 +4268,7 @@ void _orderItemModelSerialize(
 ) {
   writer.writeString(offsets[0], object.productName);
   writer.writeLong(offsets[1], object.quantity);
+  writer.writeString(offsets[2], object.sourceVentaId);
 }
 
 OrderItemModel _orderItemModelDeserialize(
@@ -4128,6 +4280,7 @@ OrderItemModel _orderItemModelDeserialize(
   final object = OrderItemModel(
     productName: reader.readStringOrNull(offsets[0]) ?? '',
     quantity: reader.readLongOrNull(offsets[1]) ?? 0,
+    sourceVentaId: reader.readStringOrNull(offsets[2]),
   );
   return object;
 }
@@ -4143,6 +4296,8 @@ P _orderItemModelDeserializeProp<P>(
       return (reader.readStringOrNull(offset) ?? '') as P;
     case 1:
       return (reader.readLongOrNull(offset) ?? 0) as P;
+    case 2:
+      return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -4342,6 +4497,165 @@ extension OrderItemModelQueryFilter
           upper: upper,
           includeUpper: includeUpper,
         ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'sourceVentaId'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'sourceVentaId'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'sourceVentaId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'sourceVentaId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'sourceVentaId',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'sourceVentaId', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<OrderItemModel, OrderItemModel, QAfterFilterCondition>
+  sourceVentaIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'sourceVentaId', value: ''),
       );
     });
   }
