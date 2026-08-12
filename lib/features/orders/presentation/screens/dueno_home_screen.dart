@@ -58,7 +58,7 @@ class _DuenoHomeScreenState extends ConsumerState<DuenoHomeScreen> {
             SectionBanner(
               roleLabel: role.label,
               sectionTitle: _sectionTitles[_tabIndex],
-              onRoleTap: () => showAccountMenu(context, ref),
+              onRoleTap: () => showAccountMenu(context, ref, role: role),
               trailingSectionAction: _tabIndex == 0
                   ? IconButton(
                       onPressed: () => context.push('/orders/map'),

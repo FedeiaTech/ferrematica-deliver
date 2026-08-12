@@ -49,7 +49,7 @@ class _CadeteHomeScreenState extends ConsumerState<CadeteHomeScreen> {
             SectionBanner(
               roleLabel: role.label,
               sectionTitle: _sectionTitles[_tabIndex],
-              onRoleTap: () => showAccountMenu(context, ref),
+              onRoleTap: () => showAccountMenu(context, ref, role: role),
             ),
             Expanded(
               child: IndexedStack(index: _tabIndex, children: _tabs),
