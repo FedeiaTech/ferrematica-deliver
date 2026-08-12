@@ -153,6 +153,60 @@ void main() {
       final saved = await repository.getById(order.id);
       expect(saved!.pendingBalance, isNull);
     });
+
+    test('cobrado with no envioPendingBalance leaves it null', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino, valorEnvio: 200);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markDelivered(order, paymentStatus: PaymentStatus.cobrado);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.entregado);
+      expect(saved.envioPendingBalance, isNull);
+    });
+
+    test('cobrado with a partial envioPendingBalance persists it', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino, valorEnvio: 200);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markDelivered(
+            order,
+            paymentStatus: PaymentStatus.cobrado,
+            envioPendingBalance: 80,
+          );
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.entregado);
+      expect(saved.envioPendingBalance, 80);
+    });
+
+    test(
+      'an order that already had an envioPendingBalance gets it cleared on full collection',
+      () async {
+        // Same shape as the pendingBalance regression above: re-marking
+        // delivered (or a follow-up settle) with no envioPendingBalance
+        // passed must not leave the old one lingering via copyWith's
+        // default `?? this.envioPendingBalance` behavior.
+        final order = buildTestOrder(
+          status: OrderStatus.entregado,
+          paymentStatus: PaymentStatus.cobrado,
+          valorEnvio: 200,
+          envioPendingBalance: 80,
+        );
+        await repository.save(order);
+
+        await container
+            .read(ordersControllerProvider.notifier)
+            .markDelivered(order, paymentStatus: PaymentStatus.cobrado);
+
+        final saved = await repository.getById(order.id);
+        expect(saved!.envioPendingBalance, isNull);
+      },
+    );
   });
 
   group('OrdersController.assignCadete', () {

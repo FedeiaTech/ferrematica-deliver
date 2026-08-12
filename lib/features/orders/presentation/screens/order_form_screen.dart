@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/ventas_remote.dart' show VentaYaVinculadaException;
+import '../../data/providers.dart' show linkedVentasProvider;
+import '../../data/ventas_remote.dart' show LinkedVenta, VentaYaVinculadaException;
 import '../../domain/order.dart';
 import '../providers.dart';
 import '../widgets/venta_picker_sheet.dart';
@@ -116,6 +117,39 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     _items = List<OrderItem>.from(source?.items ?? const <OrderItem>[]);
     _canSave = _addressController.text.trim().isNotEmpty;
     _addressController.addListener(_onAddressChanged);
+    // Editing an existing order loads its items straight from `source.items`
+    // (sourceVentaId only), so _ventaFechas/_ventaTotales/_ventaLocalIds —
+    // only ever populated by _pickVenta, which is hidden while editing —
+    // start out empty for those pre-existing venta-sourced lines. Without
+    // this backfill, _VentaItemsBlock falls back to "Venta del POS" instead
+    // of "Factura Nº ..." and _removeVenta can't subtract the right amount
+    // when un-picking a pre-existing venta during an edit.
+    final existing = _existing;
+    if (existing != null && _items.any((item) => item.sourceVentaId != null)) {
+      _backfillVentaBookkeeping(existing.id);
+    }
+  }
+
+  /// Best-effort only — same graceful-degradation posture as the rest of
+  /// this codebase's Supabase reads (e.g. `SupabaseSyncService`). A failure
+  /// here just leaves the venta-sourced blocks labelled "Venta del POS"
+  /// instead of "Factura Nº ...", same as before this backfill existed —
+  /// never worth surfacing an error for.
+  Future<void> _backfillVentaBookkeeping(String orderId) async {
+    List<LinkedVenta> linked;
+    try {
+      linked = await ref.read(linkedVentasProvider(orderId).future);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      for (final venta in linked) {
+        _ventaFechas[venta.ventaId] = venta.fecha;
+        _ventaTotales[venta.ventaId] = venta.total;
+        _ventaLocalIds[venta.ventaId] = venta.ventaLocalId;
+      }
+    });
   }
 
   void _onAddressChanged() {
@@ -345,6 +379,27 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     return null;
   }
 
+  /// Same guard as [_validateAmount], mirrored for `valorEnvio`/
+  /// [Order.envioPendingBalance]: once a delivery fee has a recorded
+  /// partial collection, the dueño must not be able to shrink `valorEnvio`
+  /// below (or down to) what's still owed on it from this form — that
+  /// would violate `Order`'s constructor invariant (and, since asserts are
+  /// stripped in release builds, would otherwise silently corrupt the
+  /// invariant until the Supabase CHECK constraint rejects it at sync
+  /// time). Unlike [_validateAmount], the boundary here is `<`, not `<=`
+  /// — [Order.envioPendingBalance] allows `envioPendingBalance ==
+  /// valorEnvio` (nothing collected yet on the fee), so an edit that brings
+  /// `valorEnvio` down to exactly the pending balance is still valid.
+  String? _validateEnvio(String? value) {
+    final envioPendingBalance = _existing?.envioPendingBalance;
+    if (envioPendingBalance == null) return null;
+    final envio = double.tryParse((value ?? '').trim());
+    if (envio == null || envio < envioPendingBalance) {
+      return 'El valor de envío no puede ser menor al saldo pendiente de cadetería de \$$envioPendingBalance';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEditing = _existing != null;
@@ -468,6 +523,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        validator: _validateEnvio,
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<PaymentMethod>(

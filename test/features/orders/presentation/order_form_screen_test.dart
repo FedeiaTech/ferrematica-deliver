@@ -211,4 +211,105 @@ void main() {
       },
     );
   });
+
+  group('editing valorEnvio below a recorded envioPendingBalance', () {
+    testWidgets(
+      'is rejected with a clear validation error, not silently saved',
+      (tester) async {
+        final existing = buildTestOrder(
+          id: 'order-1',
+          status: OrderStatus.entregado,
+          paymentStatus: PaymentStatus.cobrado,
+          valorEnvio: 200,
+          envioPendingBalance: 150,
+        );
+        final repository = FakeOrdersRepository(seed: [existing]);
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(existingOrder: existing),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        final envioField = find.widgetWithText(TextFormField, 'Valor de envío');
+        await tester.ensureVisible(envioField);
+        await tester.enterText(envioField, '100');
+        await tester.pump();
+
+        await tester.ensureVisible(find.byType(FilledButton));
+        await tester.tap(find.byType(FilledButton));
+        await tester.pumpAndSettle();
+
+        // Rejected — the order in the repository must be untouched.
+        final saved = await repository.getById('order-1');
+        expect(saved!.valorEnvio, 200);
+        expect(saved.envioPendingBalance, 150);
+        expect(find.textContaining('saldo pendiente de cadetería'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a valid edit down to exactly the pending balance succeeds (inclusive boundary)',
+      (tester) async {
+        final existing = buildTestOrder(
+          id: 'order-1',
+          status: OrderStatus.entregado,
+          paymentStatus: PaymentStatus.cobrado,
+          valorEnvio: 200,
+          envioPendingBalance: 150,
+        );
+        final repository = FakeOrdersRepository(seed: [existing]);
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(existingOrder: existing),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        final envioField = find.widgetWithText(TextFormField, 'Valor de envío');
+        await tester.ensureVisible(envioField);
+        await tester.enterText(envioField, '150');
+        await tester.pump();
+
+        await tester.ensureVisible(find.byType(FilledButton));
+        await tester.tap(find.byType(FilledButton));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.valorEnvio, 150);
+      },
+    );
+
+    testWidgets(
+      'an order with no envioPendingBalance can have its valorEnvio edited freely',
+      (tester) async {
+        final existing = buildTestOrder(id: 'order-1', valorEnvio: 200);
+        final repository = FakeOrdersRepository(seed: [existing]);
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(existingOrder: existing),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        final envioField = find.widgetWithText(TextFormField, 'Valor de envío');
+        await tester.ensureVisible(envioField);
+        await tester.enterText(envioField, '10');
+        await tester.pump();
+
+        await tester.ensureVisible(find.byType(FilledButton));
+        await tester.tap(find.byType(FilledButton));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.valorEnvio, 10);
+      },
+    );
+  });
 }
