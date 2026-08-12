@@ -7,15 +7,17 @@ import 'package:latlong2/latlong.dart' as latlong;
 import '../../../auth/presentation/providers.dart'
     show cadeteListProvider, sessionProvider;
 import '../../../delivery/presentation/providers.dart'
-    show NavigationTarget, navigationRouteProvider;
-import '../../data/providers.dart' show linkedVentasProvider, ventasRemoteProvider;
+    show NavigationRouteData, NavigationTarget, navigationRouteProvider;
+import '../../data/providers.dart'
+    show linkedVentasProvider, ventasRemoteProvider;
 import '../../data/venta_disponible.dart' show VentaDetalleDisponible;
 import '../../data/ventas_remote.dart' show LinkedVenta;
 import '../../domain/order.dart';
 import '../providers.dart';
 import '../widgets/assign_cadete_sheet.dart';
 import '../widgets/incomplete_badge.dart';
-import '../widgets/order_card.dart' show orderStatusColor, orderStatusIcon, orderStatusLabel;
+import '../widgets/order_card.dart'
+    show orderStatusColor, orderStatusIcon, orderStatusLabel;
 import '../widgets/sync_status_chip.dart';
 import 'location_picker_screen.dart';
 
@@ -78,7 +80,10 @@ class OrderDetailScreen extends ConsumerWidget {
 }
 
 class _OrderDetailBody extends ConsumerWidget {
-  const _OrderDetailBody({required this.order, required this.readOnlyForCadete});
+  const _OrderDetailBody({
+    required this.order,
+    required this.readOnlyForCadete,
+  });
 
   final Order order;
   final bool readOnlyForCadete;
@@ -89,14 +94,16 @@ class _OrderDetailBody extends ConsumerWidget {
       order.status,
       OrderStatus.entregado,
     );
-    final canCancel = !readOnlyForCadete && order.status != OrderStatus.cancelado;
+    final canCancel =
+        !readOnlyForCadete && order.status != OrderStatus.cancelado;
     // Spec's order-assignment requirement: assignable only while
     // pendiente/asignado — once en_camino or later, reassignment is
     // rejected (matches OrdersController.assignCadete's own guard).
     // Dueño-only action — never shown in cadete mode.
     final canAssignCadete =
         !readOnlyForCadete &&
-        (order.status == OrderStatus.pendiente || order.status == OrderStatus.asignado);
+        (order.status == OrderStatus.pendiente ||
+            order.status == OrderStatus.asignado);
     // Cadete-only navigation actions (PR6), also opened up to the dueño
     // when they self-assigned the order to themselves ("Base" in
     // assign_cadete_sheet.dart — no cadete accounts exist yet). "Iniciar
@@ -104,12 +111,15 @@ class _OrderDetailBody extends ConsumerWidget {
     // opening the map; "Ver ruta" only reopens the map for an already
     // en_camino order.
     final session = ref.watch(sessionProvider).value;
-    final isSelfAssigned = !readOnlyForCadete &&
+    final isSelfAssigned =
+        !readOnlyForCadete &&
         session != null &&
         order.assignedCadeteId == session.userId;
     final canNavigateToMap = readOnlyForCadete || isSelfAssigned;
-    final canStartNavigation = canNavigateToMap && order.status == OrderStatus.asignado;
-    final canViewRoute = canNavigateToMap && order.status == OrderStatus.enCamino;
+    final canStartNavigation =
+        canNavigateToMap && order.status == OrderStatus.asignado;
+    final canViewRoute =
+        canNavigateToMap && order.status == OrderStatus.enCamino;
     final navigateBasePath = readOnlyForCadete ? '/delivery' : '/orders';
     // Dueño-only, same as Editar/Cancelar/Eliminar — retrying is an
     // order-management action, not something the cadete who reported the
@@ -128,11 +138,15 @@ class _OrderDetailBody extends ConsumerWidget {
     // cadete may open offline mid-delivery.
     final linkedVentas = readOnlyForCadete
         ? const <LinkedVenta>[]
-        : ref.watch(linkedVentasProvider(order.id)).maybeWhen(
-              data: (ventas) => ventas,
-              orElse: () => const <LinkedVenta>[],
-            );
-    final linkedVentaAnulada = linkedVentas.any((venta) => venta.estado == 'anulada');
+        : ref
+              .watch(linkedVentasProvider(order.id))
+              .maybeWhen(
+                data: (ventas) => ventas,
+                orElse: () => const <LinkedVenta>[],
+              );
+    final linkedVentaAnulada = linkedVentas.any(
+      (venta) => venta.estado == 'anulada',
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -192,10 +206,16 @@ class _OrderDetailBody extends ConsumerWidget {
         ],
         if (order.latitude != null && order.longitude != null) ...[
           const SizedBox(height: 16),
-          _OrderRouteMapPreview(order: order, navigateBasePath: navigateBasePath),
+          _OrderRouteMapPreview(
+            order: order,
+            navigateBasePath: navigateBasePath,
+          ),
         ] else ...[
           const SizedBox(height: 16),
-          _DetailRow(label: 'Ubicación', value: 'No se pudo encontrar la coordenada'),
+          _DetailRow(
+            label: 'Ubicación',
+            value: 'No se pudo encontrar la coordenada',
+          ),
         ],
         if (order.deliveryProblem != null) ...[
           const SizedBox(height: 8),
@@ -223,14 +243,17 @@ class _OrderDetailBody extends ConsumerWidget {
           ),
         _DetailRow(
           label: 'Pago',
-          value: order.paymentStatus != PaymentStatus.cobrado
-              ? 'Pendiente'
-              : order.pendingBalance == null
-              ? 'Pago total'
-                    '${order.amountToCharge != null ? ' (\$${order.amountToCharge!.toStringAsFixed(2)})' : ''}'
-              : 'Cobro parcial — cobrado '
-                    '\$${(order.amountToCharge! - order.pendingBalance!).toStringAsFixed(2)}, '
-                    'falta \$${order.pendingBalance!.toStringAsFixed(2)}',
+          value: (order.paymentStatus != PaymentStatus.cobrado
+                  ? 'Pendiente'
+                  : order.pendingBalance == null
+                  ? 'Pago total'
+                        '${order.amountToCharge != null ? ' (\$${order.amountToCharge!.toStringAsFixed(2)})' : ''}'
+                  : 'Cobro parcial — cobrado '
+                        '\$${(order.amountToCharge! - order.pendingBalance!).toStringAsFixed(2)}, '
+                        'falta \$${order.pendingBalance!.toStringAsFixed(2)}') +
+              (order.envioPendingBalance != null
+                  ? '; cadetería pendiente \$${order.envioPendingBalance!.toStringAsFixed(2)}'
+                  : ''),
         ),
         if (order.status == OrderStatus.entregado && order.deliveredAt != null)
           _DetailRow(
@@ -304,7 +327,9 @@ class _OrderDetailBody extends ConsumerWidget {
                 onPressed: () => _openAssignCadeteSheet(context, ref, order),
                 icon: const Icon(Icons.person_add_alt_outlined),
                 label: Text(
-                  order.assignedCadeteId == null ? 'Asignar cadete' : 'Reasignar cadete',
+                  order.assignedCadeteId == null
+                      ? 'Asignar cadete'
+                      : 'Reasignar cadete',
                 ),
               ),
             if (canRetry)
@@ -360,7 +385,8 @@ class _OrderDetailBody extends ConsumerWidget {
   static String? _partialAmountRefusal(String raw, double total) {
     final value = _parseRoundedAmount(raw);
     if (value == null) return 'Ingresá un monto válido';
-    if (value <= 0) return 'El monto debe ser mayor a 0 — usá «Cobro pendiente»';
+    if (value <= 0)
+      return 'El monto debe ser mayor a 0 — usá «Cobro pendiente»';
     if (value >= total) return 'Ese es el total — usá «Pago total»';
     return null;
   }
@@ -372,7 +398,11 @@ class _OrderDetailBody extends ConsumerWidget {
   ) async {
     final result =
         await showModalBottomSheet<
-          ({PaymentStatus status, double? pendingBalance})
+          ({
+            PaymentStatus status,
+            double? pendingBalance,
+            double? envioPendingBalance,
+          })
         >(
           context: context,
           isScrollControlled: true,
@@ -396,14 +426,15 @@ class _OrderDetailBody extends ConsumerWidget {
           order,
           paymentStatus: result.status,
           pendingBalance: result.pendingBalance,
+          envioPendingBalance: result.envioPendingBalance,
         );
     // Marcar entregado es un cierre de flujo, no una edición más — avisamos
     // con un toast y volvemos a la lista en vez de dejar al cadete/dueño
     // parado en el detalle de un pedido que ya terminó.
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pedido entregado')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Pedido entregado')));
     if (context.canPop()) context.pop();
   }
 
@@ -456,7 +487,9 @@ class _OrderDetailBody extends ConsumerWidget {
                         final custom = await _promptCustomProblem(sheetContext);
                         if (custom == null || custom.trim().isEmpty) return;
                         if (sheetContext.mounted) {
-                          Navigator.of(sheetContext).pop('Otro: ${custom.trim()}');
+                          Navigator.of(
+                            sheetContext,
+                          ).pop('Otro: ${custom.trim()}');
                         }
                       },
                     ),
@@ -542,7 +575,10 @@ class _OrderDetailBody extends ConsumerWidget {
   /// coordinates yet — approximately Santo Tomé, Santa Fe (the default
   /// city hint in `_CitySelector`), just so the map doesn't open zoomed
   /// out over the whole world.
-  static const latlong.LatLng _fallbackMapCenter = latlong.LatLng(-31.6717, -60.7838);
+  static const latlong.LatLng _fallbackMapCenter = latlong.LatLng(
+    -31.6717,
+    -60.7838,
+  );
 
   Future<void> _correctLocation(
     BuildContext context,
@@ -560,7 +596,11 @@ class _OrderDetailBody extends ConsumerWidget {
     if (picked == null) return;
     await ref
         .read(ordersControllerProvider.notifier)
-        .setManualLocation(order, latitude: picked.latitude, longitude: picked.longitude);
+        .setManualLocation(
+          order,
+          latitude: picked.latitude,
+          longitude: picked.longitude,
+        );
   }
 
   Future<void> _confirmCancel(
@@ -619,19 +659,26 @@ class _OrderDetailBody extends ConsumerWidget {
   }
 }
 
-/// Content of `_openMarkDeliveredSheet`'s modal (design DA6): a two-step
-/// flow — step 1 picks `Pago total` / `Cobro parcial` / `Cobro pendiente`,
-/// step 2 (only reachable via `Cobro parcial`, and only offered when
+/// Content of `_openMarkDeliveredSheet`'s modal (design DA6, extended for
+/// cadetería partial collection): step 1 picks `Pago total` / `Cobro
+/// parcial` / `Cobro pendiente` for the product subtotal, step 2 (only
+/// reachable via `Cobro parcial`, and only offered when
 /// `order.amountToCharge` is set) asks for the amount actually collected.
-/// A real `StatefulWidget` (not a `StatefulBuilder` owned by the caller) so
-/// [_amountController] is created and disposed exactly once, tied to this
-/// widget's own mount lifecycle — Flutter keeps the sheet's element tree
-/// mounted through the modal's closing animation even after `pop()` has
-/// already completed the awaited future, so a controller disposed by the
-/// *caller* right after that `await` races the animation and throws "used
-/// after being disposed". Owning the controller here means `dispose()`
-/// only runs when this widget is actually unmounted, which is after the
-/// animation finishes.
+/// When `order.valorEnvio` is set, resolving step 1/2 doesn't pop the sheet
+/// yet — it advances to step 3, a follow-up choice for the delivery fee:
+/// `Cadetería cobrada completa` / `Cadetería cobro parcial` (step 4, same
+/// amount-entry shape as step 2 but against `valorEnvio`) / `Cadetería no
+/// cobrada`. Orders with no `valorEnvio` skip step 3/4 entirely and pop
+/// immediately, same as before this change. A real `StatefulWidget` (not a
+/// `StatefulBuilder` owned by the caller) so [_amountController]/
+/// [_envioAmountController] are created and disposed exactly once, tied to
+/// this widget's own mount lifecycle — Flutter keeps the sheet's element
+/// tree mounted through the modal's closing animation even after `pop()`
+/// has already completed the awaited future, so a controller disposed by
+/// the *caller* right after that `await` races the animation and throws
+/// "used after being disposed". Owning the controllers here means
+/// `dispose()` only runs when this widget is actually unmounted, which is
+/// after the animation finishes.
 class _MarkDeliveredSheetContent extends StatefulWidget {
   const _MarkDeliveredSheetContent({required this.order});
 
@@ -645,61 +692,130 @@ class _MarkDeliveredSheetContent extends StatefulWidget {
 class _MarkDeliveredSheetContentState
     extends State<_MarkDeliveredSheetContent> {
   final _amountController = TextEditingController();
+  final _envioAmountController = TextEditingController();
   var _step = 1;
+  PaymentStatus? _resolvedPaymentStatus;
+  double? _resolvedPendingBalance;
 
   @override
   void dispose() {
     _amountController.dispose();
+    _envioAmountController.dispose();
     super.dispose();
+  }
+
+  /// Resolves the product-side payment outcome (steps 1/2) and either pops
+  /// the sheet right away (no `valorEnvio` to ask about) or advances to
+  /// step 3 to also resolve the cadetería outcome.
+  void _resolveProductPayment(PaymentStatus status, double? pendingBalance) {
+    final valorEnvio = widget.order.valorEnvio;
+    // `envioPendingBalance` must be strictly > 0 when non-null (mirrors
+    // `Order`'s constructor assert / the `orders_envio_pending_balance_valido`
+    // CHECK) — a `valorEnvio` of exactly 0 has nothing to collect, so skip
+    // step 3 entirely rather than offer choices that could try to set an
+    // invalid balance.
+    if (valorEnvio == null || valorEnvio <= 0) {
+      Navigator.of(context).pop((
+        status: status,
+        pendingBalance: pendingBalance,
+        envioPendingBalance: null,
+      ));
+      return;
+    }
+    setState(() {
+      _resolvedPaymentStatus = status;
+      _resolvedPendingBalance = pendingBalance;
+      _step = 3;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final total = widget.order.amountToCharge;
+    final valorEnvio = widget.order.valorEnvio;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SafeArea(
-        child: _step == 1
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('¿Cómo queda el cobro?'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.check_circle_outline),
-                    title: const Text('Pago total'),
-                    onTap: () => Navigator.of(context).pop((
-                      status: PaymentStatus.cobrado,
-                      pendingBalance: null,
-                    )),
-                  ),
-                  if (total != null && total > 0)
-                    ListTile(
-                      leading: const Icon(Icons.percent_outlined),
-                      title: const Text('Cobro parcial'),
-                      onTap: () => setState(() => _step = 2),
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.hourglass_empty),
-                    title: const Text('Cobro pendiente'),
-                    onTap: () => Navigator.of(context).pop((
-                      status: PaymentStatus.pendiente,
-                      pendingBalance: null,
-                    )),
-                  ),
-                ],
-              )
-            : _PartialPaymentStep(
-                total: total!,
-                controller: _amountController,
-                onBack: () => setState(() => _step = 1),
-                onConfirm: (balance) => Navigator.of(context).pop((
-                  status: PaymentStatus.cobrado,
-                  pendingBalance: balance,
+        child: switch (_step) {
+          1 => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('¿Cómo queda el cobro?'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline),
+                title: const Text('Pago total'),
+                onTap: () =>
+                    _resolveProductPayment(PaymentStatus.cobrado, null),
+              ),
+              if (total != null && total > 0)
+                ListTile(
+                  leading: const Icon(Icons.percent_outlined),
+                  title: const Text('Cobro parcial'),
+                  onTap: () => setState(() => _step = 2),
+                ),
+              ListTile(
+                leading: const Icon(Icons.hourglass_empty),
+                title: const Text('Cobro pendiente'),
+                onTap: () =>
+                    _resolveProductPayment(PaymentStatus.pendiente, null),
+              ),
+            ],
+          ),
+          2 => _PartialPaymentStep(
+            total: total!,
+            controller: _amountController,
+            onBack: () => setState(() => _step = 1),
+            onConfirm: (balance) =>
+                _resolveProductPayment(PaymentStatus.cobrado, balance),
+          ),
+          3 => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('¿Cómo queda el cobro de la cadetería?'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline),
+                title: const Text('Cadetería cobrada completa'),
+                onTap: () => Navigator.of(context).pop((
+                  status: _resolvedPaymentStatus!,
+                  pendingBalance: _resolvedPendingBalance,
+                  envioPendingBalance: null,
                 )),
               ),
+              ListTile(
+                leading: const Icon(Icons.percent_outlined),
+                title: const Text('Cadetería cobro parcial'),
+                onTap: () => setState(() => _step = 4),
+              ),
+              ListTile(
+                leading: const Icon(Icons.hourglass_empty),
+                title: const Text('Cadetería no cobrada'),
+                onTap: () => Navigator.of(context).pop((
+                  status: _resolvedPaymentStatus!,
+                  pendingBalance: _resolvedPendingBalance,
+                  envioPendingBalance: valorEnvio,
+                )),
+              ),
+            ],
+          ),
+          _ => _PartialEnvioStep(
+            total: valorEnvio!,
+            controller: _envioAmountController,
+            onBack: () => setState(() => _step = 3),
+            onConfirm: (envioBalance) => Navigator.of(context).pop((
+              status: _resolvedPaymentStatus!,
+              pendingBalance: _resolvedPendingBalance,
+              envioPendingBalance: envioBalance,
+            )),
+          ),
+        },
       ),
     );
   }
@@ -768,7 +884,10 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
       child: ExpansionTile(
         title: Text('Factura Nº ${venta.ventaLocalId}'),
         leading: anulada
-            ? Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error)
+            ? Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.error,
+              )
             : null,
         onExpansionChanged: _onExpansionChanged,
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -795,7 +914,8 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
               if (snapshot.hasError) {
                 return const Text('No se pudo cargar el detalle de la venta.');
               }
-              final detalles = snapshot.data ?? const <VentaDetalleDisponible>[];
+              final detalles =
+                  snapshot.data ?? const <VentaDetalleDisponible>[];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -808,7 +928,9 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
                             child: Row(
                               children: [
                                 Flexible(
-                                  child: Text('${detalle.descripcion} x${detalle.cantidad}'),
+                                  child: Text(
+                                    '${detalle.descripcion} x${detalle.cantidad}',
+                                  ),
                                 ),
                                 if (detalle.comboId != null) ...[
                                   const SizedBox(width: 6),
@@ -890,7 +1012,10 @@ class _CadeteAssignedRow extends ConsumerWidget {
 /// triggers a status transition (unlike "Iniciar navegación"/"Ver ruta",
 /// which stay gated to the assigned cadete or a self-assigned dueño).
 class _OrderRouteMapPreview extends ConsumerWidget {
-  const _OrderRouteMapPreview({required this.order, required this.navigateBasePath});
+  const _OrderRouteMapPreview({
+    required this.order,
+    required this.navigateBasePath,
+  });
 
   final Order order;
   final String navigateBasePath;
@@ -912,79 +1037,136 @@ class _OrderRouteMapPreview extends ConsumerWidget {
       child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
     );
 
+    void openFullMap() =>
+        context.push('$navigateBasePath/${order.id}/navigate');
+
     return GestureDetector(
-      onTap: () => context.push('$navigateBasePath/${order.id}/navigate'),
+      onTap: openFullMap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           height: 260,
-          child: routeAsync.when(
-            data: (data) {
-              final markers = <Marker>[destinationMarker];
-              final polylines = <Polyline>[];
-              if (data.currentLocation != null) {
-                markers.add(
-                  Marker(
-                    point: latlong.LatLng(
-                      data.currentLocation!.latitude,
-                      data.currentLocation!.longitude,
-                    ),
-                    width: 30,
-                    height: 30,
-                    child: const Icon(Icons.my_location, color: Colors.blue),
-                  ),
-                );
-              }
-              if (data.route != null) {
-                polylines.add(
-                  Polyline(
-                    points: data.route!.polylinePoints
-                        .map((point) => latlong.LatLng(point.latitude, point.longitude))
-                        .toList(growable: false),
-                    strokeWidth: 4,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                );
-              }
-              return FlutterMap(
-                options: MapOptions(
-                  initialCenter: data.currentLocation != null
-                      ? latlong.LatLng(
-                          data.currentLocation!.latitude,
-                          data.currentLocation!.longitude,
-                        )
-                      : destination,
-                  initialZoom: 14,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.none,
-                  ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _RouteMapPreviewContent(
+                  routeAsync: routeAsync,
+                  destination: destination,
+                  destinationMarker: destinationMarker,
                 ),
-                children: [
-                  TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.ferrematica.express',
-                  ),
-                  PolylineLayer(polylines: polylines),
-                  MarkerLayer(markers: markers),
-                  // Required by OpenStreetMap's tile usage policy — see
-                  // https://operations.osmfoundation.org/policies/tiles/.
-                  RichAttributionWidget(
-                    attributions: [TextSourceAttribution('OpenStreetMap contributors')],
-                  ),
-                ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Container(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: Center(
-                child: Text(
-                  'No se pudo calcular la ruta.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              // Explicit affordance to open the full interactive map before
+              // the trip starts (not just once "Iniciar navegación" is
+              // tapped) — the whole preview is already tappable for this,
+              // but a visible icon makes it discoverable instead of relying
+              // on "the map itself is a button" being obvious.
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Material(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.85),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    onPressed: openFullMap,
+                    icon: const Icon(Icons.fullscreen),
+                    tooltip: 'Ver mapa completo',
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Extracted so [_OrderRouteMapPreview.build] can layer the top-right
+/// "open full map" button over it inside a [Stack] without duplicating the
+/// `routeAsync.when(...)` branches.
+class _RouteMapPreviewContent extends StatelessWidget {
+  const _RouteMapPreviewContent({
+    required this.routeAsync,
+    required this.destination,
+    required this.destinationMarker,
+  });
+
+  final AsyncValue<NavigationRouteData> routeAsync;
+  final latlong.LatLng destination;
+  final Marker destinationMarker;
+
+  @override
+  Widget build(BuildContext context) {
+    return routeAsync.when(
+      data: (data) {
+        final markers = <Marker>[destinationMarker];
+        final polylines = <Polyline>[];
+        if (data.currentLocation != null) {
+          markers.add(
+            Marker(
+              point: latlong.LatLng(
+                data.currentLocation!.latitude,
+                data.currentLocation!.longitude,
+              ),
+              width: 30,
+              height: 30,
+              child: const Icon(Icons.my_location, color: Colors.blue),
+            ),
+          );
+        }
+        if (data.route != null) {
+          polylines.add(
+            Polyline(
+              points: data.route!.polylinePoints
+                  .map(
+                    (point) => latlong.LatLng(point.latitude, point.longitude),
+                  )
+                  .toList(growable: false),
+              strokeWidth: 4,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        }
+        return FlutterMap(
+          options: MapOptions(
+            initialCenter: data.currentLocation != null
+                ? latlong.LatLng(
+                    data.currentLocation!.latitude,
+                    data.currentLocation!.longitude,
+                  )
+                : destination,
+            initialZoom: 14,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.none,
+            ),
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.ferrematica.express',
+            ),
+            PolylineLayer(polylines: polylines),
+            MarkerLayer(markers: markers),
+            // Required by OpenStreetMap's tile usage policy — see
+            // https://operations.osmfoundation.org/policies/tiles/.
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution('OpenStreetMap contributors'),
+              ],
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Container(
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: Center(
+          child: Text(
+            'No se pudo calcular la ruta.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onErrorContainer,
             ),
           ),
         ),
@@ -1077,6 +1259,95 @@ class _PartialPaymentStep extends StatelessWidget {
   }
 }
 
+/// Step 4 of `_openMarkDeliveredSheet` — the cadetería equivalent of
+/// [_PartialPaymentStep]: how much of `valorEnvio` was actually collected.
+/// Same shape/validation as [_PartialPaymentStep] (reuses
+/// [_OrderDetailBody._partialAmountRefusal]/[_OrderDetailBody._parseRoundedAmount]
+/// since the amount-vs-total validation rule is identical), just against
+/// [total] = `order.valorEnvio` instead of `order.amountToCharge`, and
+/// [onConfirm] receives the resulting `envioPendingBalance` instead of
+/// `pendingBalance`.
+class _PartialEnvioStep extends StatelessWidget {
+  const _PartialEnvioStep({
+    required this.total,
+    required this.controller,
+    required this.onBack,
+    required this.onConfirm,
+  });
+
+  final double total;
+  final TextEditingController controller;
+  final VoidCallback onBack;
+  final ValueChanged<double> onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          final rawText = value.text;
+          final refusal = _OrderDetailBody._partialAmountRefusal(
+            rawText,
+            total,
+          );
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Cadetería — cobro parcial, total \$${total.toStringAsFixed(2)}',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Monto cobrado de cadetería',
+                  border: const OutlineInputBorder(),
+                  errorText: rawText.isEmpty ? null : refusal,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onBack,
+                      child: const Text('Volver'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: refusal == null
+                          ? () => onConfirm(
+                              double.parse(
+                                (total -
+                                        _OrderDetailBody._parseRoundedAmount(
+                                          rawText,
+                                        )!)
+                                    .toStringAsFixed(2),
+                              ),
+                            )
+                          : null,
+                      child: const Text('Confirmar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// Shared `dd/mm/yyyy hh:mm` formatter — same shape as
 /// `_LinkedVentaTileState._formatFecha`/`_formatHora`, kept as its own
 /// top-level function here since it's used outside that class too (the
@@ -1088,10 +1359,10 @@ String _formatFechaHora(DateTime fecha) {
       '${two(local.hour)}:${two(local.minute)}';
 }
 
-/// Subtotal (bold) / Envío (only when set) / Total (bold) breakdown —
-/// display-only, never persisted as a computed field (design: "el valor
-/// total no es necesario registrarlo en la factura"). [subtotal] is
-/// [Order.amountToCharge]; [valorEnvio] is added on top only when non-null.
+/// Subtotal (bold) / Envío / Total (bold) breakdown — display-only, never
+/// persisted as a computed field (design: "el valor total no es necesario
+/// registrarlo en la factura"). [subtotal] is [Order.amountToCharge];
+/// [valorEnvio] is added on top when non-null, shown as "-" otherwise.
 class _PricingSummary extends StatelessWidget {
   const _PricingSummary({required this.subtotal, required this.valorEnvio});
 
@@ -1102,6 +1373,13 @@ class _PricingSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = subtotal + (valorEnvio ?? 0);
     const boldStyle = TextStyle(fontWeight: FontWeight.bold);
+    // Total is bold too (like Subtotal) but needs to stand out as the
+    // headline figure, not just match Subtotal's weight — larger and in
+    // the theme's primary color, set off by a divider above it.
+    final totalStyle = boldStyle.copyWith(
+      fontSize: 18,
+      color: Theme.of(context).colorScheme.primary,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -1116,25 +1394,29 @@ class _PricingSummary extends StatelessWidget {
               Text('\$${subtotal.toStringAsFixed(2)}', style: boldStyle),
             ],
           ),
-          if (valorEnvio != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-                  const SizedBox(width: 120, child: Text('Envío')),
-                  Text('\$${valorEnvio!.toStringAsFixed(2)}'),
-                ],
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Row(
               children: [
-                const SizedBox(
-                  width: 120,
-                  child: Text('Total', style: boldStyle),
+                const SizedBox(width: 120, child: Text('Envío')),
+                Text(
+                  valorEnvio != null
+                      ? '\$${valorEnvio!.toStringAsFixed(2)}'
+                      : '-',
                 ),
-                Text('\$${total.toStringAsFixed(2)}', style: boldStyle),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Divider(height: 1),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              children: [
+                SizedBox(width: 120, child: Text('Total', style: totalStyle)),
+                Text('\$${total.toStringAsFixed(2)}', style: totalStyle),
               ],
             ),
           ),
@@ -1149,6 +1431,7 @@ class _DetailRow extends StatelessWidget {
 
   final String label;
   final String value;
+
   /// Shown before [value] when set — e.g. a red warning icon on the
   /// "Problema reportado" row, so a failed delivery stands out at a
   /// glance instead of reading identically to every other detail row.
@@ -1169,7 +1452,11 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           if (valueIcon != null) ...[
-            Icon(valueIcon, size: 18, color: Theme.of(context).colorScheme.error),
+            Icon(
+              valueIcon,
+              size: 18,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(width: 6),
           ],
           Expanded(child: Text(value)),
