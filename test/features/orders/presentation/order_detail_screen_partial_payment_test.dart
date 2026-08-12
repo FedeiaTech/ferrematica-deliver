@@ -222,4 +222,146 @@ void main() {
       },
     );
   });
+
+  group('_openMarkDeliveredSheet — cadetería follow-up (valorEnvio set)', () {
+    testWidgets(
+      '"Cadetería cobrada completa" leaves envioPendingBalance null',
+      (tester) async {
+        final repository = FakeOrdersRepository(
+          seed: [
+            buildTestOrder(
+              id: 'order-1',
+              status: OrderStatus.enCamino,
+              valorEnvio: 200,
+            ),
+          ],
+        );
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(const OrderDetailScreen(orderId: 'order-1')),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Marcar entrega'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pago total'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('¿Cómo queda el cobro de la cadetería?'), findsOneWidget);
+
+        await tester.tap(find.text('Cadetería cobrada completa'));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.status, OrderStatus.entregado);
+        expect(saved.envioPendingBalance, isNull);
+      },
+    );
+
+    testWidgets(
+      '"Cadetería cobro parcial" saves the correct remaining amount',
+      (tester) async {
+        final repository = FakeOrdersRepository(
+          seed: [
+            buildTestOrder(
+              id: 'order-1',
+              status: OrderStatus.enCamino,
+              valorEnvio: 200,
+            ),
+          ],
+        );
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(const OrderDetailScreen(orderId: 'order-1')),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Marcar entrega'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pago total'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cadetería cobro parcial'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Monto cobrado de cadetería'),
+          '80',
+        );
+        await tester.pump();
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.status, OrderStatus.entregado);
+        expect(saved.envioPendingBalance, 120);
+      },
+    );
+
+    testWidgets(
+      '"Cadetería no cobrada" saves envioPendingBalance == valorEnvio',
+      (tester) async {
+        final repository = FakeOrdersRepository(
+          seed: [
+            buildTestOrder(
+              id: 'order-1',
+              status: OrderStatus.enCamino,
+              valorEnvio: 200,
+            ),
+          ],
+        );
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(const OrderDetailScreen(orderId: 'order-1')),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Marcar entrega'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pago total'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cadetería no cobrada'));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.status, OrderStatus.entregado);
+        expect(saved.envioPendingBalance, 200);
+      },
+    );
+
+    testWidgets(
+      'cadetería follow-up is skipped entirely when valorEnvio is null',
+      (tester) async {
+        final repository = FakeOrdersRepository(
+          seed: [buildTestOrder(id: 'order-1', status: OrderStatus.enCamino)],
+        );
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          _withRouter(const OrderDetailScreen(orderId: 'order-1')),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Marcar entrega'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pago total'));
+        await tester.pumpAndSettle();
+
+        final saved = await repository.getById('order-1');
+        expect(saved!.status, OrderStatus.entregado);
+        expect(saved.envioPendingBalance, isNull);
+      },
+    );
+  });
 }

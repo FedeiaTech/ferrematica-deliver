@@ -15,6 +15,8 @@ Order buildTestOrder({
   DateTime? updatedAt,
   String? assignedCadeteId,
   double? pendingBalance,
+  double? valorEnvio,
+  double? envioPendingBalance,
 }) {
   final at = updatedAt ?? DateTime(2026, 1, 1);
   return Order(
@@ -30,6 +32,8 @@ Order buildTestOrder({
     syncStatus: syncStatus,
     assignedCadeteId: assignedCadeteId,
     pendingBalance: pendingBalance,
+    valorEnvio: valorEnvio,
+    envioPendingBalance: envioPendingBalance,
   );
 }
 
