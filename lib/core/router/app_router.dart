@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/app_session.dart';
 import '../../features/auth/presentation/providers.dart';
+import '../../features/auth/presentation/screens/create_cadete_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/delivery/presentation/screens/cadete_home_screen.dart';
 import '../../features/delivery/presentation/screens/navigation_map_screen.dart';
@@ -122,6 +123,14 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
             path: 'map',
             name: 'orders-map',
             builder: (context, state) => const OrdersMapScreen(),
+          ),
+          GoRoute(
+            path: 'cadetes/new',
+            name: 'cadete-new',
+            // Dueño-only, same as every other route under `/orders` — the
+            // top-level `redirect` above already blocks a cadete session
+            // from reaching this path.
+            builder: (context, state) => const CreateCadeteScreen(),
           ),
           GoRoute(
             path: ':id',
