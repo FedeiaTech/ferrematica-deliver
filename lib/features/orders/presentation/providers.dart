@@ -399,10 +399,16 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// pendingBalance == null` so `copyWith`'s `?? this.pendingBalance`
   /// default can never leave a stale balance behind when this method is
   /// called again (e.g. settling a previously-partial delivery in full).
+  ///
+  /// [envioPendingBalance] mirrors [pendingBalance] but for the delivery
+  /// fee (`order.valorEnvio`) — `null` means either there's no delivery fee
+  /// or it was collected in full; same `clearEnvioPendingBalance` treatment
+  /// for the same reason.
   Future<void> markDelivered(
     Order order, {
     required PaymentStatus paymentStatus,
     double? pendingBalance,
+    double? envioPendingBalance,
   }) async {
     if (!isValidTransition(order.status, OrderStatus.entregado)) return;
     await _repository.save(
@@ -411,6 +417,8 @@ class OrdersController extends Notifier<AsyncValue<void>> {
         paymentStatus: paymentStatus,
         pendingBalance: pendingBalance,
         clearPendingBalance: pendingBalance == null,
+        envioPendingBalance: envioPendingBalance,
+        clearEnvioPendingBalance: envioPendingBalance == null,
         deliveredAt: DateTime.now(),
         syncStatus: SyncStatus.pending,
       ),
