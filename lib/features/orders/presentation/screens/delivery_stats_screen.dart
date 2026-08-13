@@ -15,6 +15,78 @@ final StateProvider<_StatsPeriod> _statsPeriodProvider = StateProvider<_StatsPer
   (ref) => _StatsPeriod.hoy,
 );
 
+/// Reference date the selected period is computed around — "Hoy"/"Semana"/
+/// "Mes" describe the CURRENT day/week/month only when this equals
+/// [DateTime.now()]; the ‹ › controls in [_PeriodSelector] step it back to
+/// view past periods. Reset to now whenever the period granularity itself
+/// changes (see [_PeriodSelector]), so switching from "Semana" to "Mes"
+/// never carries over an unrelated offset.
+final StateProvider<DateTime> _statsAnchorProvider = StateProvider<DateTime>(
+  (ref) => DateTime.now(),
+);
+
+/// Exclusive upper bound matching [_periodStart] — together they scope a
+/// past period to exactly its own window instead of "from back then until
+/// now", which is what a plain `!deliveredAt.isBefore(periodStart)` check
+/// would otherwise give once [anchor] can be in the past.
+DateTime _periodEnd(_StatsPeriod period, DateTime anchor) {
+  final start = _periodStart(period, anchor);
+  switch (period) {
+    case _StatsPeriod.hoy:
+      return start.add(const Duration(days: 1));
+    case _StatsPeriod.semana:
+      return start.add(const Duration(days: 7));
+    case _StatsPeriod.mes:
+      return DateTime(start.year, start.month + 1, 1);
+  }
+}
+
+/// Steps [anchor] one [period] unit backward (`direction: -1`) or forward
+/// (`direction: 1`). "Mes" normalizes to the 1st so month-length rollovers
+/// (e.g. anchored on the 31st, stepping into a shorter month) never skip or
+/// double-count a month.
+DateTime _shiftAnchor(_StatsPeriod period, DateTime anchor, int direction) {
+  switch (period) {
+    case _StatsPeriod.hoy:
+      return anchor.add(Duration(days: direction));
+    case _StatsPeriod.semana:
+      return anchor.add(Duration(days: 7 * direction));
+    case _StatsPeriod.mes:
+      return DateTime(anchor.year, anchor.month + direction, 1);
+  }
+}
+
+const List<String> _monthAbbrevs = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+];
+const List<String> _monthNames = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre',
+  'Octubre', 'Noviembre', 'Diciembre',
+];
+
+/// Human-readable label for the currently selected period+anchor, shown
+/// between the ‹ › navigation controls — e.g. "Hoy", "Ayer", "11 – 17 ago",
+/// "Agosto 2026".
+String _anchorLabel(_StatsPeriod period, DateTime anchor) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  switch (period) {
+    case _StatsPeriod.hoy:
+      final day = DateTime(anchor.year, anchor.month, anchor.day);
+      if (day == today) return 'Hoy';
+      if (day == today.subtract(const Duration(days: 1))) return 'Ayer';
+      return '${day.day} ${_monthAbbrevs[day.month - 1]} ${day.year}';
+    case _StatsPeriod.semana:
+      final start = _periodStart(period, anchor);
+      final end = start.add(const Duration(days: 6));
+      return start.month == end.month
+          ? '${start.day} – ${end.day} ${_monthAbbrevs[start.month - 1]}'
+          : '${start.day} ${_monthAbbrevs[start.month - 1]} – ${end.day} ${_monthAbbrevs[end.month - 1]}';
+    case _StatsPeriod.mes:
+      return '${_monthNames[anchor.month - 1]} ${anchor.year}';
+  }
+}
+
 /// Delivery stats, role-aware: a cadete sees only their own numbers (for
 /// settling their pay), the dueño sees a per-cadete breakdown — including
 /// their own self-deliveries, labeled "Base" — for Entregados / Cancelados
@@ -35,6 +107,7 @@ class DeliveryStatsScreen extends ConsumerWidget {
         : ref.watch(cadeteOrdersProvider);
     final cadetesAsync = ref.watch(cadeteListProvider);
     final period = ref.watch(_statsPeriodProvider);
+    final anchor = ref.watch(_statsAnchorProvider);
 
     return Scaffold(
       body: session == null
@@ -46,6 +119,7 @@ class DeliveryStatsScreen extends ConsumerWidget {
                 ownUserId: session.userId,
                 cadetesAsync: cadetesAsync,
                 period: period,
+                anchor: anchor,
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) =>
@@ -62,19 +136,21 @@ class _StatsBody extends StatelessWidget {
     required this.ownUserId,
     required this.cadetesAsync,
     required this.period,
+    required this.anchor,
   });
 
   final List<Order> orders;
   final bool isDueno;
   final String ownUserId;
   final AsyncValue<List<CadeteProfile>> cadetesAsync;
+  final DateTime anchor;
   final _StatsPeriod period;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final periodStart = _periodStart(period, now);
-    final monthStart = DateTime(now.year, now.month, 1);
+    final periodStart = _periodStart(period, anchor);
+    final periodEnd = _periodEnd(period, anchor);
+    final monthStart = DateTime(anchor.year, anchor.month, 1);
 
     final byAssignee = <String, _AssigneeStats>{};
     // Chart buckets depend on the selected period's granularity: hour of
@@ -89,7 +165,7 @@ class _StatsBody extends StatelessWidget {
       if (order.status == OrderStatus.entregado && order.deliveredAt != null) {
         final deliveredAt = order.deliveredAt!;
 
-        if (!deliveredAt.isBefore(periodStart)) {
+        if (!deliveredAt.isBefore(periodStart) && deliveredAt.isBefore(periodEnd)) {
           stats.delivered++;
           // Credit only the portion of the delivery fee actually collected
           // — a non-null `envioPendingBalance` means part of it is still
@@ -101,7 +177,13 @@ class _StatsBody extends StatelessWidget {
           if (order.valorEnvio != null) {
             stats.envioTotal += order.valorEnvio! - (order.envioPendingBalance ?? 0);
           }
-          if (order.paymentStatus == PaymentStatus.cobrado) {
+          if (order.paymentStatus == PaymentStatus.incobrable) {
+            // Written off, not collected and no longer chased — credits
+            // nothing to `amountCollected` (it wasn't collected) and
+            // nothing to `pendingPaymentAmount` (it's not pending anymore,
+            // it's resolved-as-a-loss). Matches `needsPaymentFollowUp`
+            // already excluding `incobrable` for the same reason.
+          } else if (order.paymentStatus == PaymentStatus.cobrado) {
             // DA5: a `cobrado` order can still carry a non-null
             // `pendingBalance` (a partial collection) — crediting the full
             // `amountToCharge` here would silently misreport it as fully
@@ -129,16 +211,23 @@ class _StatsBody extends StatelessWidget {
         // No dedicated `cancelledAt` field — `updatedAt` is the closest
         // proxy for "when this landed in cancelado", good enough for a
         // period bucket.
-        if (!order.updatedAt.isBefore(periodStart)) stats.cancelledOrProblem++;
+        if (!order.updatedAt.isBefore(periodStart) && order.updatedAt.isBefore(periodEnd)) {
+          stats.cancelledOrProblem++;
+        }
       }
     }
 
+    // Deliberately real-calendar-month, not anchor-relative — this list's
+    // own doc comment says "always calendar-month, independent of the
+    // period selector", and that's still the intent now that the period
+    // selector can itself point at a past month.
+    final currentMonthStart = DateTime(DateTime.now().year, DateTime.now().month, 1);
     final problemsByAssignee = <String, Map<String, int>>{};
     for (final order in orders) {
       final assignee = order.assignedCadeteId;
       final problem = order.deliveryProblem;
       if (assignee == null || problem == null) continue;
-      if (order.updatedAt.isBefore(monthStart)) continue;
+      if (order.updatedAt.isBefore(currentMonthStart)) continue;
       final reasons = problemsByAssignee.putIfAbsent(assignee, () => <String, int>{});
       reasons[problem] = (reasons[problem] ?? 0) + 1;
     }
@@ -162,7 +251,7 @@ class _StatsBody extends StatelessWidget {
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _PeriodSelector(period: period),
+          _PeriodSelector(period: period, anchor: anchor),
           const SizedBox(height: 16),
           _StatsCard(title: 'Vos', stats: stats),
           const SizedBox(height: 16),
@@ -185,7 +274,7 @@ class _StatsBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _PeriodSelector(period: period),
+        _PeriodSelector(period: period, anchor: anchor),
         const SizedBox(height: 16),
         if (sortedIds.isEmpty)
           const Padding(
@@ -261,26 +350,99 @@ DateTime _periodStart(_StatsPeriod period, DateTime now) {
 
 String _periodLabel(_StatsPeriod period) => switch (period) {
   _StatsPeriod.hoy => 'Hoy',
-  _StatsPeriod.semana => 'Esta semana',
-  _StatsPeriod.mes => 'Este mes',
+  _StatsPeriod.semana => 'Semana',
+  _StatsPeriod.mes => 'Mes',
 };
 
 class _PeriodSelector extends ConsumerWidget {
-  const _PeriodSelector({required this.period});
+  const _PeriodSelector({required this.period, required this.anchor});
 
   final _StatsPeriod period;
+  final DateTime anchor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Wrap(
-      spacing: 8,
+    // Can't navigate past the current period — once the anchor's own
+    // period already covers "now", there's nothing more recent to show.
+    final atCurrentPeriod =
+        !_periodStart(period, anchor).isBefore(_periodStart(period, DateTime.now()));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final option in _StatsPeriod.values)
-          ChoiceChip(
-            label: Text(_periodLabel(option)),
-            selected: period == option,
-            onSelected: (_) => ref.read(_statsPeriodProvider.notifier).state = option,
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final option in _StatsPeriod.values)
+              ChoiceChip(
+                label: Text(_periodLabel(option)),
+                selected: period == option,
+                // Light semi-opaque fill while inactive so the chip reads
+                // clearly against any custom `BrandBackground`, matching
+                // the pedidos filter buttons.
+                backgroundColor: Colors.white.withValues(alpha: 0.5),
+                onSelected: (_) {
+                  ref.read(_statsPeriodProvider.notifier).state = option;
+                  // A leftover offset from the previous granularity (e.g.
+                  // "3 weeks back") means nothing once switched to "Mes" —
+                  // reset so every new selection starts at the current
+                  // period.
+                  ref.read(_statsAnchorProvider.notifier).state = DateTime.now();
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        // `SizedBox(width: infinity)` so `Center` has the full row width to
+        // center within — a bare `Center` inside this `Column`
+        // (crossAxisAlignment.start) would otherwise only ever be as wide
+        // as its own content and never visibly "centered" (same fix as
+        // `_StatsCard`'s `Wrap` above).
+        SizedBox(
+          width: double.infinity,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_left_rounded, size: 32),
+                  tooltip: 'Período anterior',
+                  onPressed: () => ref.read(_statsAnchorProvider.notifier).state = _shiftAnchor(
+                    period,
+                    anchor,
+                    -1,
+                  ),
+                ),
+                // Semi-transparent aura behind the label so a custom
+                // `BrandBackground` (solid or striped) never swallows the
+                // text — same idea as the period chips' translucent fill
+                // above.
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _anchorLabel(period, anchor),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_right_rounded, size: 32),
+                  tooltip: 'Período siguiente',
+                  onPressed: atCurrentPeriod
+                      ? null
+                      : () => ref.read(_statsAnchorProvider.notifier).state = _shiftAnchor(
+                          period,
+                          anchor,
+                          1,
+                        ),
+                ),
+              ],
+            ),
           ),
+        ),
       ],
     );
   }
@@ -302,44 +464,55 @@ class _StatsCard extends StatelessWidget {
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              children: [
-                _StatValue(label: 'Productos entregados', value: '${stats.delivered}'),
-                _StatValue(label: 'Cancelados', value: '${stats.cancelledOrProblem}'),
-                // Products-only portion of what's been collected — includes
-                // partial collections (a `cobrado` order can still carry a
-                // non-null `pendingBalance`, see DA5 above), never
-                // `valorEnvio`. Renamed from "Cobrado" to "Productos" so it
-                // reads unambiguously next to the new "Total cobrado" figure
-                // below, which folds `valorEnvio` back in.
-                _StatValue(
-                  label: 'Productos',
-                  value: '\$${stats.amountCollected.toStringAsFixed(2)}',
-                ),
-                _StatValue(
-                  label: 'Envíos',
-                  value: '\$${stats.envioTotal.toStringAsFixed(2)}',
-                ),
-                // Everything actually collected across both categories:
-                // products (partial-aware, [_AssigneeStats.amountCollected])
-                // plus cadetería (also partial-aware via
-                // `Order.envioPendingBalance`/[_AssigneeStats.envioTotal] —
-                // see the gating above, same shape as the products side).
-                _StatValue(
-                  label: 'Total cobrado',
-                  value:
-                      '\$${(stats.amountCollected + stats.envioTotal).toStringAsFixed(2)}',
-                ),
-              ],
+            // `SizedBox(width: infinity)` so `WrapAlignment.center` has the
+            // full card width to center within — a bare `Wrap` inside this
+            // `Column` (crossAxisAlignment.start) would otherwise only ever
+            // be as wide as its own content and never visibly "centered".
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  _StatValue(label: 'Entregados', value: '${stats.delivered}'),
+                  _StatValue(label: 'Cancelados', value: '${stats.cancelledOrProblem}'),
+                  // Products-only portion of what's been collected —
+                  // includes partial collections (a `cobrado` order can
+                  // still carry a non-null `pendingBalance`, see DA5
+                  // above), never `valorEnvio`. Renamed from "Cobrado" to
+                  // "Productos" so it reads unambiguously next to the new
+                  // "Total cobrado" figure below, which folds `valorEnvio`
+                  // back in.
+                  _StatValue(
+                    label: 'Productos',
+                    value: '\$${stats.amountCollected.toStringAsFixed(2)}',
+                  ),
+                  _StatValue(
+                    label: 'Envíos',
+                    value: '\$${stats.envioTotal.toStringAsFixed(2)}',
+                  ),
+                  // Everything actually collected across both categories:
+                  // products (partial-aware,
+                  // [_AssigneeStats.amountCollected]) plus cadetería (also
+                  // partial-aware via
+                  // `Order.envioPendingBalance`/[_AssigneeStats.envioTotal]
+                  // — see the gating above, same shape as the products
+                  // side).
+                  _StatValue(
+                    label: 'Total cobrado',
+                    value:
+                        '\$${(stats.amountCollected + stats.envioTotal).toStringAsFixed(2)}',
+                  ),
+                ],
+              ),
             ),
             if (stats.pendingPaymentCount > 0) ...[
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _StatValue(
                     label: 'Pendientes de cobrar',
@@ -394,7 +567,7 @@ class _StatValue extends StatelessWidget {
 /// Every bucket in the period's full range is rendered (even ones with
 /// zero deliveries), wrapped in a horizontal scroll view so a 24-bar
 /// "Hoy" chart never overflows a narrow phone screen.
-class _DeliveredBarChart extends StatelessWidget {
+class _DeliveredBarChart extends StatefulWidget {
   const _DeliveredBarChart({
     required this.period,
     required this.buckets,
@@ -405,10 +578,59 @@ class _DeliveredBarChart extends StatelessWidget {
   final Map<int, int> buckets;
   final DateTime monthStart;
 
+  @override
+  State<_DeliveredBarChart> createState() => _DeliveredBarChartState();
+}
+
+class _DeliveredBarChartState extends State<_DeliveredBarChart> {
   static const double _maxBarHeight = 100;
 
+  final ScrollController _scrollController = ScrollController();
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_updateScrollHints);
+    // The controller has no clients until after first layout — check again
+    // post-frame so a chart that overflows on first build shows its "can
+    // scroll right" hint immediately instead of only after the user's
+    // first touch triggers a listener call.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollHints());
+  }
+
+  @override
+  void didUpdateWidget(_DeliveredBarChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Bucket count/content can change (different period, different
+    // assignee's data) without the ScrollController itself emitting a
+    // scroll notification, so re-check after the resulting rebuild too.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollHints());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_updateScrollHints);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _updateScrollHints() {
+    if (!_scrollController.hasClients || !mounted) return;
+    final position = _scrollController.position;
+    final canScrollLeft = position.pixels > position.minScrollExtent;
+    final canScrollRight = position.pixels < position.maxScrollExtent;
+    if (canScrollLeft != _canScrollLeft || canScrollRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canScrollLeft;
+        _canScrollRight = canScrollRight;
+      });
+    }
+  }
+
   List<({String label, int bucket})> _bucketRange() {
-    switch (period) {
+    switch (widget.period) {
       case _StatsPeriod.hoy:
         return [for (var hour = 0; hour < 24; hour++) (label: '${hour}h', bucket: hour)];
       case _StatsPeriod.semana:
@@ -418,7 +640,7 @@ class _DeliveredBarChart extends StatelessWidget {
             (label: weekdayLabels[bucket], bucket: bucket),
         ];
       case _StatsPeriod.mes:
-        final daysInMonth = DateTime(monthStart.year, monthStart.month + 1, 0).day;
+        final daysInMonth = DateTime(widget.monthStart.year, widget.monthStart.month + 1, 0).day;
         final totalWeeks = (daysInMonth / 7).ceil();
         return [
           for (var week = 0; week < totalWeeks; week++) (label: 'Sem ${week + 1}', bucket: week),
@@ -429,7 +651,7 @@ class _DeliveredBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final range = _bucketRange();
-    final maxCount = buckets.values.fold(0, (a, b) => a > b ? a : b);
+    final maxCount = widget.buckets.values.fold(0, (a, b) => a > b ? a : b);
     final barColor = Theme.of(context).colorScheme.onSurface;
 
     return Card(
@@ -438,67 +660,115 @@ class _DeliveredBarChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Productos entregados — ${_periodLabel(period)}', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              'Entregados — ${_periodLabel(widget.period)}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             const SizedBox(height: 12),
             // Centered when the bars fit the available width, scrollable
             // (left-anchored, same as before) once they don't — the
             // `ConstrainedBox` + `Center` combo lets a `SingleChildScrollView`
-            // do both without measuring the content itself.
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: Center(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (final entry in range)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${buckets[entry.bucket] ?? 0}',
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    width: 20,
-                                    height: maxCount == 0
-                                        ? 4
-                                        : (_maxBarHeight * (buckets[entry.bucket] ?? 0) / maxCount)
-                                            .clamp(4, _maxBarHeight),
-                                    decoration: BoxDecoration(
-                                      color: barColor,
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(3),
+            // do both without measuring the content itself. The chevron
+            // hints in the `Stack` only render while `_canScrollLeft`/
+            // `_canScrollRight` are true, i.e. only when there's actually
+            // more content off-screen in that direction.
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      controller: _scrollController,
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                        child: Center(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final entry in range)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${widget.buckets[entry.bucket] ?? 0}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        width: 20,
+                                        height: maxCount == 0
+                                            ? 4
+                                            : (_maxBarHeight *
+                                                      (widget.buckets[entry.bucket] ?? 0) /
+                                                      maxCount)
+                                                  .clamp(4, _maxBarHeight),
+                                        decoration: BoxDecoration(
+                                          color: barColor,
+                                          borderRadius: const BorderRadius.vertical(
+                                            top: Radius.circular(3),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        entry.label,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    entry.label,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    );
+                  },
+                ),
+                if (_canScrollLeft)
+                  Positioned(
+                    left: 0,
+                    child: _ScrollHintArrow(icon: Icons.arrow_left_rounded),
                   ),
-                );
-              },
+                if (_canScrollRight)
+                  Positioned(
+                    right: 0,
+                    child: _ScrollHintArrow(icon: Icons.arrow_right_rounded),
+                  ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Triangle-arrow hint overlaid on a [_DeliveredBarChart] edge, telling the
+/// user there are more bars off-screen in that direction. Semi-transparent
+/// so it reads as a hint, not an interactive control — the scroll view
+/// beneath it already handles the actual dragging.
+class _ScrollHintArrow extends StatelessWidget {
+  const _ScrollHintArrow({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Icon(
+        icon,
+        size: 28,
+        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
       ),
     );
   }

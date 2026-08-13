@@ -128,4 +128,84 @@ void main() {
       expect(find.text('\$130.00'), findsOneWidget);
     },
   );
+
+  group('period navigation', () {
+    testWidgets(
+      'stepping the "Hoy" anchor back to yesterday reveals a delivery excluded '
+      'from today\'s totals, and the label switches from "Hoy" to "Ayer"',
+      (tester) async {
+        final now = DateTime.now();
+        final yesterday = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(const Duration(days: 1)).add(const Duration(hours: 10));
+        final repository = FakeOrdersRepository(
+          seed: [
+            buildTestOrder(
+              id: 'order-yesterday',
+              status: OrderStatus.entregado,
+              paymentStatus: PaymentStatus.cobrado,
+              amountToCharge: 321,
+              assignedCadeteId: 'fake-owner',
+            ).copyWith(deliveredAt: yesterday, updatedAt: yesterday),
+          ],
+        );
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          const MaterialApp(home: DeliveryStatsScreen()),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        // "Hoy" appears twice at rest: the period-type chip and the
+        // anchor-range label both read "Hoy" while anchored on today.
+        expect(find.text('Hoy'), findsNWidgets(2));
+        // Today's "Hoy" period excludes yesterday's delivery — its unique
+        // amount shouldn't be credited to "Productos" yet.
+        expect(find.text('\$321.00'), findsNothing);
+
+        await tester.tap(find.byTooltip('Período anterior'));
+        await tester.pumpAndSettle();
+
+        // The chip still reads "Hoy" (period type unchanged) — only the
+        // anchor label moves to "Ayer".
+        expect(find.text('Hoy'), findsOneWidget);
+        expect(find.text('Ayer'), findsOneWidget);
+        // Shows twice: "Productos" and "Total cobrado" both read $321.00
+        // since this order has no valorEnvio (envioTotal stays 0).
+        expect(find.text('\$321.00'), findsNWidgets(2));
+      },
+    );
+
+    testWidgets(
+      'the "next period" button is disabled at the current period and enables '
+      'once stepped back',
+      (tester) async {
+        final repository = FakeOrdersRepository();
+        addTearDown(repository.dispose);
+
+        await pumpApp(
+          tester,
+          const MaterialApp(home: DeliveryStatsScreen()),
+          overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+        );
+        await tester.pumpAndSettle();
+
+        Finder nextIconButton() => find.ancestor(
+          of: find.byTooltip('Período siguiente'),
+          matching: find.byType(IconButton),
+        );
+
+        expect(tester.widget<IconButton>(nextIconButton()).onPressed, isNull);
+
+        await tester.tap(find.byTooltip('Período anterior'));
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<IconButton>(nextIconButton()).onPressed, isNotNull);
+      },
+    );
+  });
 }

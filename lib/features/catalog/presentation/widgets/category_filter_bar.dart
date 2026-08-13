@@ -31,6 +31,12 @@ class CategoryFilterBar extends StatelessWidget {
             child: FilterChip(
               label: const Text('Todos'),
               selected: selectedKey == null,
+              // Semi-transparent aura on unselected chips so the label
+              // stays legible against any custom `BrandBackground` (solid
+              // or striped) — matches the stats period selector's chips.
+              backgroundColor: selectedKey == null
+                  ? null
+                  : Colors.white.withValues(alpha: 0.5),
               onSelected: (_) => onSelected(null),
             ),
           ),
@@ -40,6 +46,9 @@ class CategoryFilterBar extends StatelessWidget {
               child: FilterChip(
                 label: Text(option.label),
                 selected: selectedKey == option.key,
+                backgroundColor: selectedKey == option.key
+                    ? null
+                    : Colors.white.withValues(alpha: 0.5),
                 onSelected: (_) =>
                     onSelected(selectedKey == option.key ? null : option.key),
               ),

@@ -70,15 +70,33 @@ final Provider<String?> effectiveSelectedCategoryKeyProvider =
           : null;
     });
 
-/// [catalogProvider]'s data filtered by [effectiveSelectedCategoryKeyProvider].
+/// Current text typed into the catalog's search field — raw, un-trimmed
+/// (trimming/case-folding happens where it's compared, in
+/// [visibleProductsProvider]) so the field's own controller stays the
+/// single source of truth for what's displayed.
+final StateProvider<String> productSearchQueryProvider =
+    StateProvider<String>((ref) => '');
+
+/// [catalogProvider]'s data filtered by [effectiveSelectedCategoryKeyProvider]
+/// and, in real time, by [productSearchQueryProvider] (matched against name
+/// and SKU, case-insensitive).
 final Provider<AsyncValue<List<Product>>> visibleProductsProvider =
     Provider<AsyncValue<List<Product>>>((ref) {
       final catalogAsync = ref.watch(catalogProvider);
       final effectiveKey = ref.watch(effectiveSelectedCategoryKeyProvider);
+      final query = ref.watch(productSearchQueryProvider).trim().toLowerCase();
       return catalogAsync.whenData((products) {
-        if (effectiveKey == null) return products;
-        return products
-            .where((product) => product.categoryKey == effectiveKey)
-            .toList(growable: false);
+        Iterable<Product> result = products;
+        if (effectiveKey != null) {
+          result = result.where((product) => product.categoryKey == effectiveKey);
+        }
+        if (query.isNotEmpty) {
+          result = result.where(
+            (product) =>
+                product.name.toLowerCase().contains(query) ||
+                product.sku.toLowerCase().contains(query),
+          );
+        }
+        return result.toList(growable: false);
       });
     });

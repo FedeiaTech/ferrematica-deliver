@@ -39,6 +39,7 @@ class _CatalogBody extends ConsumerWidget {
     final effectiveKey = ref.watch(effectiveSelectedCategoryKeyProvider);
     final visibleAsync = ref.watch(visibleProductsProvider);
     final allProducts = ref.watch(catalogProvider).value ?? const <Product>[];
+    final hasSearchQuery = ref.watch(productSearchQueryProvider).trim().isNotEmpty;
 
     Future<void> refresh() {
       ref.invalidate(catalogProvider);
@@ -47,6 +48,13 @@ class _CatalogBody extends ConsumerWidget {
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: _ProductSearchField(
+            onChanged: (value) =>
+                ref.read(productSearchQueryProvider.notifier).state = value,
+          ),
+        ),
         if (options.length >= 2)
           CategoryFilterBar(
             options: options,
@@ -66,7 +74,8 @@ class _CatalogBody extends ConsumerWidget {
               data: (visible) {
                 if (visible.isEmpty) {
                   final isFilteredEmpty =
-                      allProducts.isNotEmpty && effectiveKey != null;
+                      allProducts.isNotEmpty &&
+                      (effectiveKey != null || hasSearchQuery);
                   return CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
@@ -75,14 +84,14 @@ class _CatalogBody extends ConsumerWidget {
                         child: _CatalogEmpty(
                           filtered: isFilteredEmpty,
                           onShowAll: isFilteredEmpty
-                              ? () =>
-                                    ref
-                                            .read(
-                                              selectedCategoryKeyProvider
-                                                  .notifier,
-                                            )
-                                            .state =
-                                        null
+                              ? () {
+                                  ref
+                                          .read(selectedCategoryKeyProvider.notifier)
+                                          .state =
+                                      null;
+                                  ref.read(productSearchQueryProvider.notifier).state =
+                                      '';
+                                }
                               : null,
                         ),
                       ),
@@ -165,7 +174,7 @@ class _CatalogEmpty extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               filtered
-                  ? 'No hay productos en esta categoría.'
+                  ? 'No hay productos que coincidan con el filtro.'
                   : 'Todavía no hay productos cargados.',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -181,6 +190,70 @@ class _CatalogEmpty extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Real-time search field for the catalog grid, filtering by name/SKU as
+/// the user types (see [productSearchQueryProvider] and
+/// [visibleProductsProvider]). A `ConsumerStatefulWidget` — not a plain
+/// `TextField` fed straight from the provider — so the controller can be
+/// reset externally (e.g. the empty state's "Ver todos" button clearing
+/// [productSearchQueryProvider]) without fighting the user's own typing.
+class _ProductSearchField extends ConsumerStatefulWidget {
+  const _ProductSearchField({required this.onChanged});
+
+  final ValueChanged<String> onChanged;
+
+  @override
+  ConsumerState<_ProductSearchField> createState() => _ProductSearchFieldState();
+}
+
+class _ProductSearchFieldState extends ConsumerState<_ProductSearchField> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Keep the field in sync when the query is cleared elsewhere (e.g. the
+    // "Ver todos" button) without clobbering the caret mid-typing — only
+    // overwrite when the provider's value actually diverges from what's
+    // shown.
+    final query = ref.watch(productSearchQueryProvider);
+    if (query != _controller.text) {
+      _controller.value = _controller.value.copyWith(
+        text: query,
+        selection: TextSelection.collapsed(offset: query.length),
+      );
+    }
+
+    return TextField(
+      controller: _controller,
+      onChanged: widget.onChanged,
+      decoration: InputDecoration(
+        hintText: 'Buscar productos...',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: query.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.clear),
+                tooltip: 'Limpiar búsqueda',
+                onPressed: () => widget.onChanged(''),
+              ),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
