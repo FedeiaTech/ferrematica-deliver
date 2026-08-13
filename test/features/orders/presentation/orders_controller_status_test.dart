@@ -209,6 +209,73 @@ void main() {
     );
   });
 
+  group('OrdersController.markIncobrable', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('writes off the remainder of a partial collection, keeping pendingBalance', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+        pendingBalance: 60,
+      );
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .markIncobrable(order, reason: 'se mudó sin avisar');
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.incobrable);
+      // Kept, not cleared — historical record of what was written off.
+      expect(saved.pendingBalance, 60);
+      expect(saved.incobrableReason, 'se mudó sin avisar');
+      expect(saved.incobrableAt, isNotNull);
+      expect(saved.needsPaymentFollowUp, isFalse);
+    });
+
+    test('writes off an order that never collected anything at all', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.pendiente,
+        amountToCharge: 100,
+      );
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).markIncobrable(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.incobrable);
+      expect(saved.pendingBalance, isNull);
+      expect(saved.incobrableReason, isNull);
+    });
+
+    test('is a no-op when there is nothing owed', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+      );
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).markIncobrable(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.incobrableAt, isNull);
+    });
+  });
+
   group('OrdersController.assignCadete', () {
     late FakeOrdersRepository repository;
     late ProviderContainer container;

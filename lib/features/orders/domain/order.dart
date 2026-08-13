@@ -24,8 +24,13 @@ enum OrderStatus { pendiente, asignado, entregado, cancelado, enCamino }
 /// dueño fills it in.
 enum PaymentMethod { efectivo, transferencia, sinDefinir }
 
-/// Whether the order's charge has been collected.
-enum PaymentStatus { pendiente, cobrado }
+/// Whether the order's charge has been collected. `incobrable` is
+/// deliberately **appended** at the end, not inserted after `cobrado` — see
+/// `OrderStatus.enCamino`'s doc comment above for why: `OrderModel
+/// .paymentStatus` is `@enumerated` (Isar's ordinal storage), so inserting
+/// a value mid-declaration would silently corrupt every existing row's
+/// on-disk `paymentStatus`.
+enum PaymentStatus { pendiente, cobrado, incobrable }
 
 /// Local sync state against Supabase. Lives on the row itself — see design
 /// decision "Sync state on the row, not a mutation-log outbox".
@@ -100,17 +105,21 @@ final class Order {
     this.pendingBalance,
     this.valorEnvio,
     this.envioPendingBalance,
+    this.retriedFromOrderId,
+    this.incobrableAt,
+    this.incobrableReason,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
        ),
        assert(
          pendingBalance == null ||
-             (paymentStatus == PaymentStatus.cobrado &&
+             ((paymentStatus == PaymentStatus.cobrado ||
+                     paymentStatus == PaymentStatus.incobrable) &&
                  pendingBalance > 0 &&
                  amountToCharge != null &&
                  pendingBalance < amountToCharge),
-         'pendingBalance must be null, or a strict partial of amountToCharge on a cobrado order',
+         'pendingBalance must be null, or a strict partial of amountToCharge on a cobrado/incobrable order',
        ),
        assert(
          envioPendingBalance == null ||
@@ -175,6 +184,52 @@ final class Order {
   /// collected yet" is represented as `envioPendingBalance == valorEnvio`.
   final double? envioPendingBalance;
 
+  /// The `id` of the cancelled order this one was created FROM, via
+  /// "Reintentar entrega" (`order_form_screen.dart`'s `prefillFrom`) —
+  /// `null` for every order created any other way. Never cleared once set:
+  /// a retry-of-a-retry keeps pointing at its own immediate predecessor,
+  /// not the original — walk the chain backwards (`retriedFromOrderId` →
+  /// that order's own `retriedFromOrderId` → ...) to reach the very first
+  /// attempt. Purely a display/navigation aid (`order_detail_screen.dart`
+  /// links to it); no FK server-side, same rationale as
+  /// `venta_order_links.order_id` in `0011_ventas_mirror.sql` — the
+  /// referenced order may not have synced to Supabase yet.
+  final String? retriedFromOrderId;
+
+  /// Set once, by `OrdersController.markIncobrable`, when the dueño writes
+  /// off an entregado order's outstanding debt as uncollectible — either
+  /// the remainder of a partial collection (`pendingBalance` stays set, as
+  /// a historical record of what was forgiven) or a delivery that never
+  /// collected anything at all. Final: there is no "undo" action, matching
+  /// this codebase's other one-way claims (`venta_order_links`,
+  /// `deliveryProblem`). `null` for every order that hasn't been written
+  /// off.
+  final DateTime? incobrableAt;
+
+  /// Optional free-text note captured alongside [incobrableAt] — why the
+  /// debt was written off. Never required, never cleared once set.
+  final String? incobrableReason;
+
+  /// True when [latitude]/[longitude] are both present AND finite,
+  /// in-range geographic values — rejects the NaN/Infinity/out-of-range
+  /// coordinate a bad geocode result can occasionally produce (observed on
+  /// a real device: a malformed pair reaching `flutter_map`'s
+  /// `CameraFit`/`TileLayer` crashes the whole render pipeline, since that
+  /// failure surfaces from *inside* an animation frame callback, outside
+  /// any synchronous try/catch around the call that triggered it — see
+  /// `order_detail_screen.dart`'s `_OrderRouteMapPreview` and
+  /// `navigation_map_screen.dart`, the two places that gate on this before
+  /// ever constructing a map widget from this order's coordinates).
+  bool get hasValidCoordinates =>
+      latitude != null &&
+      longitude != null &&
+      latitude!.isFinite &&
+      longitude!.isFinite &&
+      latitude! >= -90 &&
+      latitude! <= 90 &&
+      longitude! >= -180 &&
+      longitude! <= 180;
+
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
       amountToCharge == null || paymentMethod == PaymentMethod.sinDefinir;
@@ -187,10 +242,14 @@ final class Order {
 
   /// True when the order was marked delivered but money is still owed —
   /// either nothing was collected yet, or only part of it was. Drives the
-  /// dueño-facing alert banner and follow-up counters.
+  /// dueño-facing alert banner, follow-up counters, and whether "Marcar
+  /// incobrable" is offered (`order_detail_screen.dart`). `false` once
+  /// [paymentStatus] is `incobrable` — that debt has already been resolved
+  /// (by write-off, not collection), so it must stop being chased.
   bool get needsPaymentFollowUp =>
-      (status == OrderStatus.entregado && paymentStatus == PaymentStatus.pendiente) ||
-      pendingBalance != null;
+      paymentStatus != PaymentStatus.incobrable &&
+      ((status == OrderStatus.entregado && paymentStatus == PaymentStatus.pendiente) ||
+          pendingBalance != null);
 
   /// Returns a copy of this order with the given fields replaced.
   /// [updatedAt] always advances to `DateTime.now()` (or [updatedAt] if
@@ -208,7 +267,10 @@ final class Order {
   /// [clearPendingBalance] is `true` (needed to mark a partial payment as
   /// fully collected without leaving the old balance behind), and
   /// [envioPendingBalance] when [clearEnvioPendingBalance] is `true` (same
-  /// need, but for the delivery fee).
+  /// need, but for the delivery fee), and [notes] when [clearNotes] is
+  /// `true` (needed so the "Editar nota" quick action on an `en_camino`
+  /// order — `order_detail_screen.dart` — can blank an existing note
+  /// instead of only ever replacing it with different non-empty text).
   Order copyWith({
     String? deliveryAddress,
     double? latitude,
@@ -218,6 +280,7 @@ final class Order {
     String? clientName,
     String? clientPhone,
     String? notes,
+    bool clearNotes = false,
     String? assignedCadeteId,
     bool clearAssignedCadeteId = false,
     double? amountToCharge,
@@ -236,6 +299,8 @@ final class Order {
     bool clearValorEnvio = false,
     double? envioPendingBalance,
     bool clearEnvioPendingBalance = false,
+    DateTime? incobrableAt,
+    String? incobrableReason,
   }) {
     return Order(
       id: id,
@@ -248,7 +313,7 @@ final class Order {
       resolvedCity: clearCoordinates ? null : (resolvedCity ?? this.resolvedCity),
       clientName: clientName ?? this.clientName,
       clientPhone: clientPhone ?? this.clientPhone,
-      notes: notes ?? this.notes,
+      notes: clearNotes ? null : (notes ?? this.notes),
       assignedCadeteId: clearAssignedCadeteId
           ? null
           : (assignedCadeteId ?? this.assignedCadeteId),
@@ -266,6 +331,15 @@ final class Order {
       envioPendingBalance: clearEnvioPendingBalance
           ? null
           : (envioPendingBalance ?? this.envioPendingBalance),
+      // Set once at creation only, in `OrdersController.createOrder` — no
+      // param to overwrite it here, just carried through every mutation
+      // unchanged (a bug fixed alongside adding `incobrableAt`/
+      // `incobrableReason` below: this line was missing entirely, so any
+      // `copyWith` call — e.g. `reportDeliveryProblem` cancelling a retry
+      // order — silently dropped its retry-chain link).
+      retriedFromOrderId: retriedFromOrderId,
+      incobrableAt: incobrableAt ?? this.incobrableAt,
+      incobrableReason: incobrableReason ?? this.incobrableReason,
     );
   }
 }

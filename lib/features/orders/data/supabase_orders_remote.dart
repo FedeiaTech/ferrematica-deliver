@@ -91,6 +91,9 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'pending_balance': order.pendingBalance,
     'valor_envio': order.valorEnvio,
     'envio_pending_balance': order.envioPendingBalance,
+    'retried_from_order_id': order.retriedFromOrderId,
+    'incobrable_at': order.incobrableAt?.toUtc().toIso8601String(),
+    'incobrable_reason': order.incobrableReason,
   };
 
   /// Maps an `orders` row back to the domain [Order]. See [toRow].
@@ -131,6 +134,11 @@ class SupabaseOrdersRemote implements OrdersRemote {
     pendingBalance: (row['pending_balance'] as num?)?.toDouble(),
     valorEnvio: (row['valor_envio'] as num?)?.toDouble(),
     envioPendingBalance: (row['envio_pending_balance'] as num?)?.toDouble(),
+    retriedFromOrderId: row['retried_from_order_id'] as String?,
+    incobrableAt: row['incobrable_at'] == null
+        ? null
+        : DateTime.parse(row['incobrable_at'] as String),
+    incobrableReason: row['incobrable_reason'] as String?,
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/
@@ -178,10 +186,12 @@ class SupabaseOrdersRemote implements OrdersRemote {
   static String _paymentStatusToRow(PaymentStatus status) => switch (status) {
     PaymentStatus.pendiente => 'pendiente',
     PaymentStatus.cobrado => 'cobrado',
+    PaymentStatus.incobrable => 'incobrable',
   };
 
   static PaymentStatus _paymentStatusFromRow(String value) => switch (value) {
     'cobrado' => PaymentStatus.cobrado,
+    'incobrable' => PaymentStatus.incobrable,
     _ => PaymentStatus.pendiente,
   };
 }

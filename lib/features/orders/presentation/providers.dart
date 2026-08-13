@@ -34,23 +34,30 @@ final StateProvider<Set<OrderStatus>> orderFilterProvider = StateProvider<Set<Or
   (ref) => OrderStatus.values.toSet(),
 );
 
-/// Extra toggle in the status filter menu, independent of [orderFilterProvider]:
-/// when `true`, only orders [isOrderUnassigned] applies to are shown. Every
-/// new order is auto-assigned to the dueño at creation (see `createOrder`
-/// below), so `asignado` alone can't tell "actually handed to a cadete"
-/// apart from "still sitting on the dueño's own plate" — this toggle
-/// surfaces the latter.
-final StateProvider<bool> orderShowOnlyUnassignedProvider = StateProvider<bool>(
-  (ref) => false,
-);
+/// Whether a *real* cadete is on the hook for an order, independent of
+/// [OrderStatus] entirely — a delivery the dueño ("Base") did themselves is
+/// "No asignado" whether it's still `pendiente`, sitting `asignado` on
+/// their own default self-assignment, or already `entregado`. Deliberately
+/// its own filter dimension rather than folded into [orderFilterProvider]:
+/// status answers "where is this in its lifecycle", assignment answers
+/// "who's actually carrying it" — a dueño-run delivery and a cadete-run one
+/// can land in the exact same status.
+enum AssignmentFilter { asignado, noAsignado }
 
-/// True when [order] is `asignado` but [cadeteIds] (the real cadete roster,
-/// from [cadeteListProvider]) doesn't contain its `assignedCadeteId` — i.e.
-/// it's still on the dueño's default self-assignment from `createOrder`,
-/// not actually handed off to a cadete.
+/// Currently selected assignment filter — the set of [AssignmentFilter]
+/// values to show. Defaults to both ("Todos"), mirroring
+/// [orderFilterProvider]'s "every value selected = no restriction"
+/// convention.
+final StateProvider<Set<AssignmentFilter>> orderAssignmentFilterProvider =
+    StateProvider<Set<AssignmentFilter>>((ref) => AssignmentFilter.values.toSet());
+
+/// True when [order] has no *real* cadete on the hook for it — either
+/// nobody at all ([OrderStatus.pendiente], `assignedCadeteId` cleared) or
+/// still on the dueño's default self-assignment from `createOrder`
+/// ("Base"), per [cadeteIds] (the real cadete roster, from
+/// [cadeteListProvider]) not containing it. Independent of [order.status].
 bool isOrderUnassigned(Order order, Set<String> cadeteIds) =>
-    order.status == OrderStatus.asignado &&
-    !cadeteIds.contains(order.assignedCadeteId);
+    order.assignedCadeteId == null || !cadeteIds.contains(order.assignedCadeteId);
 
 /// Fire-and-forget backfill for `resolvedCity` on orders that already have
 /// coordinates but predate that field (or whose reverse-geocode attempt
@@ -110,7 +117,7 @@ final StreamProvider<List<Order>> ordersStreamProvider =
 final Provider<AsyncValue<List<Order>>> filteredOrdersProvider =
     Provider<AsyncValue<List<Order>>>((ref) {
       final filter = ref.watch(orderFilterProvider);
-      final onlyUnassigned = ref.watch(orderShowOnlyUnassignedProvider);
+      final assignmentFilter = ref.watch(orderAssignmentFilterProvider);
       final ordersAsync = ref.watch(ordersStreamProvider);
       final cadeteIds = ref
           .watch(cadeteListProvider)
@@ -123,8 +130,13 @@ final Provider<AsyncValue<List<Order>>> filteredOrdersProvider =
         if (filter.length != OrderStatus.values.length) {
           result = result.where((order) => filter.contains(order.status));
         }
-        if (onlyUnassigned) {
-          result = result.where((order) => isOrderUnassigned(order, cadeteIds));
+        if (assignmentFilter.length != AssignmentFilter.values.length) {
+          result = result.where((order) {
+            final state = isOrderUnassigned(order, cadeteIds)
+                ? AssignmentFilter.noAsignado
+                : AssignmentFilter.asignado;
+            return assignmentFilter.contains(state);
+          });
         }
         return result.toList(growable: false);
       });
@@ -141,6 +153,26 @@ final orderByIdProvider = Provider.family<AsyncValue<Order?>, String>((
   return ordersAsync.whenData((orders) {
     for (final order in orders) {
       if (order.id == id) return order;
+    }
+    return null;
+  });
+});
+
+/// Looks up the order (if any) whose `retriedFromOrderId` points AT [id] —
+/// the forward half of the retry-chain link, complementing
+/// `order.retriedFromOrderId` (the backward half already on the `Order`
+/// itself). Lets `order_detail_screen.dart` show "Reintentado en ..." on
+/// the cancelled order once its retry exists, not just "Reintento de ..."
+/// on the retry looking back. `null` when this order was never retried (or
+/// its retry hasn't synced yet).
+final retryOfOrderProvider = Provider.family<AsyncValue<Order?>, String>((
+  ref,
+  id,
+) {
+  final ordersAsync = ref.watch(ordersStreamProvider);
+  return ordersAsync.whenData((orders) {
+    for (final order in orders) {
+      if (order.retriedFromOrderId == id) return order;
     }
     return null;
   });
@@ -195,6 +227,7 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     List<OrderItem> items = const <OrderItem>[],
     String? cityHint,
     List<String> fromVentaIds = const <String>[],
+    String? retriedFromOrderId,
   }) async {
     final session = ref.read(sessionProvider).value;
     if (session == null) {
@@ -220,6 +253,7 @@ class OrdersController extends Notifier<AsyncValue<void>> {
       valorEnvio: valorEnvio,
       paymentMethod: paymentMethod,
       items: items,
+      retriedFromOrderId: retriedFromOrderId,
     );
     await _repository.save(order);
     // Fire-and-forget (design decision #9): geocoding must never delay or
@@ -360,6 +394,29 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     await _repository.save(
       order.copyWith(
         status: OrderStatus.cancelado,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
+  /// Writes off an `entregado` order's outstanding debt as uncollectible —
+  /// either the remainder of a partial collection or a delivery that never
+  /// collected anything at all (see [Order.needsPaymentFollowUp], the same
+  /// condition `order_detail_screen.dart` uses to offer this action).
+  /// [pendingBalance] is deliberately left untouched (kept as a historical
+  /// record of what was forgiven, same as [Order.incobrableAt]'s doc
+  /// comment) — only [Order.paymentStatus] changes, never [Order.status]:
+  /// the delivery itself already happened, this is purely a collections
+  /// outcome. Final, no "undo" — a no-op if [order] isn't eligible
+  /// (already incobrable, or has nothing owed) rather than throwing, so a
+  /// stale UI state (e.g. a second tap racing the first) degrades safely.
+  Future<void> markIncobrable(Order order, {String? reason}) async {
+    if (!order.needsPaymentFollowUp) return;
+    await _repository.save(
+      order.copyWith(
+        paymentStatus: PaymentStatus.incobrable,
+        incobrableAt: DateTime.now(),
+        incobrableReason: reason,
         syncStatus: SyncStatus.pending,
       ),
     );

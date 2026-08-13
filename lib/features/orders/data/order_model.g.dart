@@ -73,65 +73,80 @@ const OrderModelSchema = CollectionSchema(
       type: IsarType.double,
     ),
     r'id': PropertySchema(id: 11, name: r'id', type: IsarType.string),
-    r'items': PropertySchema(
+    r'incobrableAt': PropertySchema(
       id: 12,
+      name: r'incobrableAt',
+      type: IsarType.dateTime,
+    ),
+    r'incobrableReason': PropertySchema(
+      id: 13,
+      name: r'incobrableReason',
+      type: IsarType.string,
+    ),
+    r'items': PropertySchema(
+      id: 14,
       name: r'items',
       type: IsarType.objectList,
 
       target: r'OrderItemModel',
     ),
     r'latitude': PropertySchema(
-      id: 13,
+      id: 15,
       name: r'latitude',
       type: IsarType.double,
     ),
     r'longitude': PropertySchema(
-      id: 14,
+      id: 16,
       name: r'longitude',
       type: IsarType.double,
     ),
-    r'notes': PropertySchema(id: 15, name: r'notes', type: IsarType.string),
+    r'notes': PropertySchema(id: 17, name: r'notes', type: IsarType.string),
     r'paymentMethod': PropertySchema(
-      id: 16,
+      id: 18,
       name: r'paymentMethod',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentMethodEnumValueMap,
     ),
     r'paymentStatus': PropertySchema(
-      id: 17,
+      id: 19,
       name: r'paymentStatus',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentStatusEnumValueMap,
     ),
     r'pendingBalance': PropertySchema(
-      id: 18,
+      id: 20,
       name: r'pendingBalance',
       type: IsarType.double,
     ),
     r'resolvedCity': PropertySchema(
-      id: 19,
+      id: 21,
       name: r'resolvedCity',
       type: IsarType.string,
     ),
+    r'retriedFromOrderId': PropertySchema(
+      id: 22,
+      name: r'retriedFromOrderId',
+      type: IsarType.string,
+    ),
     r'status': PropertySchema(
-      id: 20,
+      id: 23,
       name: r'status',
       type: IsarType.byte,
       enumMap: _OrderModelstatusEnumValueMap,
     ),
     r'syncStatus': PropertySchema(
-      id: 21,
+      id: 24,
       name: r'syncStatus',
       type: IsarType.byte,
       enumMap: _OrderModelsyncStatusEnumValueMap,
     ),
     r'updatedAt': PropertySchema(
-      id: 22,
+      id: 25,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'valorEnvio': PropertySchema(
-      id: 23,
+      id: 26,
       name: r'valorEnvio',
       type: IsarType.double,
     ),
@@ -238,6 +253,12 @@ int _orderModelEstimateSize(
     }
   }
   bytesCount += 3 + object.id.length * 3;
+  {
+    final value = object.incobrableReason;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.items.length * 3;
   {
     final offsets = allOffsets[OrderItemModel]!;
@@ -258,6 +279,12 @@ int _orderModelEstimateSize(
   }
   {
     final value = object.resolvedCity;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.retriedFromOrderId;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -283,23 +310,26 @@ void _orderModelSerialize(
   writer.writeString(offsets[9], object.deliveryProblem);
   writer.writeDouble(offsets[10], object.envioPendingBalance);
   writer.writeString(offsets[11], object.id);
+  writer.writeDateTime(offsets[12], object.incobrableAt);
+  writer.writeString(offsets[13], object.incobrableReason);
   writer.writeObjectList<OrderItemModel>(
-    offsets[12],
+    offsets[14],
     allOffsets,
     OrderItemModelSchema.serialize,
     object.items,
   );
-  writer.writeDouble(offsets[13], object.latitude);
-  writer.writeDouble(offsets[14], object.longitude);
-  writer.writeString(offsets[15], object.notes);
-  writer.writeByte(offsets[16], object.paymentMethod.index);
-  writer.writeByte(offsets[17], object.paymentStatus.index);
-  writer.writeDouble(offsets[18], object.pendingBalance);
-  writer.writeString(offsets[19], object.resolvedCity);
-  writer.writeByte(offsets[20], object.status.index);
-  writer.writeByte(offsets[21], object.syncStatus.index);
-  writer.writeDateTime(offsets[22], object.updatedAt);
-  writer.writeDouble(offsets[23], object.valorEnvio);
+  writer.writeDouble(offsets[15], object.latitude);
+  writer.writeDouble(offsets[16], object.longitude);
+  writer.writeString(offsets[17], object.notes);
+  writer.writeByte(offsets[18], object.paymentMethod.index);
+  writer.writeByte(offsets[19], object.paymentStatus.index);
+  writer.writeDouble(offsets[20], object.pendingBalance);
+  writer.writeString(offsets[21], object.resolvedCity);
+  writer.writeString(offsets[22], object.retriedFromOrderId);
+  writer.writeByte(offsets[23], object.status.index);
+  writer.writeByte(offsets[24], object.syncStatus.index);
+  writer.writeDateTime(offsets[25], object.updatedAt);
+  writer.writeDouble(offsets[26], object.valorEnvio);
 }
 
 OrderModel _orderModelDeserialize(
@@ -321,37 +351,40 @@ OrderModel _orderModelDeserialize(
     deliveryProblem: reader.readStringOrNull(offsets[9]),
     envioPendingBalance: reader.readDoubleOrNull(offsets[10]),
     id: reader.readString(offsets[11]),
+    incobrableAt: reader.readDateTimeOrNull(offsets[12]),
+    incobrableReason: reader.readStringOrNull(offsets[13]),
     items:
         reader.readObjectList<OrderItemModel>(
-          offsets[12],
+          offsets[14],
           OrderItemModelSchema.deserialize,
           allOffsets,
           OrderItemModel(),
         ) ??
         const <OrderItemModel>[],
-    latitude: reader.readDoubleOrNull(offsets[13]),
-    longitude: reader.readDoubleOrNull(offsets[14]),
-    notes: reader.readStringOrNull(offsets[15]),
+    latitude: reader.readDoubleOrNull(offsets[15]),
+    longitude: reader.readDoubleOrNull(offsets[16]),
+    notes: reader.readStringOrNull(offsets[17]),
     paymentMethod:
         _OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
-          offsets[16],
+          offsets[18],
         )] ??
         PaymentMethod.sinDefinir,
     paymentStatus:
         _OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
-          offsets[17],
+          offsets[19],
         )] ??
         PaymentStatus.pendiente,
-    pendingBalance: reader.readDoubleOrNull(offsets[18]),
-    resolvedCity: reader.readStringOrNull(offsets[19]),
+    pendingBalance: reader.readDoubleOrNull(offsets[20]),
+    resolvedCity: reader.readStringOrNull(offsets[21]),
+    retriedFromOrderId: reader.readStringOrNull(offsets[22]),
     status:
-        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[20])] ??
+        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[23])] ??
         OrderStatus.pendiente,
     syncStatus:
-        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[21])] ??
+        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[24])] ??
         SyncStatus.pending,
-    updatedAt: reader.readDateTime(offsets[22]),
-    valorEnvio: reader.readDoubleOrNull(offsets[23]),
+    updatedAt: reader.readDateTime(offsets[25]),
+    valorEnvio: reader.readDoubleOrNull(offsets[26]),
   );
   return object;
 }
@@ -388,6 +421,10 @@ P _orderModelDeserializeProp<P>(
     case 11:
       return (reader.readString(offset)) as P;
     case 12:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 13:
+      return (reader.readStringOrNull(offset)) as P;
+    case 14:
       return (reader.readObjectList<OrderItemModel>(
                 offset,
                 OrderItemModelSchema.deserialize,
@@ -396,41 +433,43 @@ P _orderModelDeserializeProp<P>(
               ) ??
               const <OrderItemModel>[])
           as P;
-    case 13:
-      return (reader.readDoubleOrNull(offset)) as P;
-    case 14:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 15:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 16:
+      return (reader.readDoubleOrNull(offset)) as P;
+    case 17:
+      return (reader.readStringOrNull(offset)) as P;
+    case 18:
       return (_OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentMethod.sinDefinir)
           as P;
-    case 17:
+    case 19:
       return (_OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentStatus.pendiente)
           as P;
-    case 18:
-      return (reader.readDoubleOrNull(offset)) as P;
-    case 19:
-      return (reader.readStringOrNull(offset)) as P;
     case 20:
+      return (reader.readDoubleOrNull(offset)) as P;
+    case 21:
+      return (reader.readStringOrNull(offset)) as P;
+    case 22:
+      return (reader.readStringOrNull(offset)) as P;
+    case 23:
       return (_OrderModelstatusValueEnumMap[reader.readByteOrNull(offset)] ??
               OrderStatus.pendiente)
           as P;
-    case 21:
+    case 24:
       return (_OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               SyncStatus.pending)
           as P;
-    case 22:
+    case 25:
       return (reader.readDateTime(offset)) as P;
-    case 23:
+    case 26:
       return (reader.readDoubleOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -447,10 +486,15 @@ const _OrderModelpaymentMethodValueEnumMap = {
   1: PaymentMethod.transferencia,
   2: PaymentMethod.sinDefinir,
 };
-const _OrderModelpaymentStatusEnumValueMap = {'pendiente': 0, 'cobrado': 1};
+const _OrderModelpaymentStatusEnumValueMap = {
+  'pendiente': 0,
+  'cobrado': 1,
+  'incobrable': 2,
+};
 const _OrderModelpaymentStatusValueEnumMap = {
   0: PaymentStatus.pendiente,
   1: PaymentStatus.cobrado,
+  2: PaymentStatus.incobrable,
 };
 const _OrderModelstatusEnumValueMap = {
   'pendiente': 0,
@@ -2484,6 +2528,238 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'incobrableAt'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'incobrableAt'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'incobrableAt', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtGreaterThan(DateTime? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'incobrableAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtLessThan(DateTime? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'incobrableAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'incobrableAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'incobrableReason'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'incobrableReason'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'incobrableReason',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'incobrableReason',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'incobrableReason',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'incobrableReason', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableReasonIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'incobrableReason', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> isarIdEqualTo(
     Id value,
   ) {
@@ -3305,6 +3581,165 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'retriedFromOrderId'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'retriedFromOrderId'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'retriedFromOrderId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'retriedFromOrderId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'retriedFromOrderId',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'retriedFromOrderId', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  retriedFromOrderIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'retriedFromOrderId', value: ''),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> statusEqualTo(
     OrderStatus value,
   ) {
@@ -3737,6 +4172,31 @@ extension OrderModelQuerySortBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByIncobrableAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByIncobrableAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByIncobrableReason() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableReason', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByIncobrableReasonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableReason', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByLatitude() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'latitude', Sort.asc);
@@ -3819,6 +4279,20 @@ extension OrderModelQuerySortBy
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByResolvedCityDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'resolvedCity', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByRetriedFromOrderId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retriedFromOrderId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByRetriedFromOrderIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retriedFromOrderId', Sort.desc);
     });
   }
 
@@ -4023,6 +4497,31 @@ extension OrderModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByIncobrableAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByIncobrableAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByIncobrableReason() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableReason', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByIncobrableReasonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableReason', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByIsarId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isarId', Sort.asc);
@@ -4117,6 +4616,20 @@ extension OrderModelQuerySortThenBy
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByResolvedCityDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'resolvedCity', Sort.desc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByRetriedFromOrderId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retriedFromOrderId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByRetriedFromOrderIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'retriedFromOrderId', Sort.desc);
     });
   }
 
@@ -4267,6 +4780,23 @@ extension OrderModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByIncobrableAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'incobrableAt');
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByIncobrableReason({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'incobrableReason',
+        caseSensitive: caseSensitive,
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByLatitude() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'latitude');
@@ -4310,6 +4840,17 @@ extension OrderModelQueryWhereDistinct
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'resolvedCity', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByRetriedFromOrderId({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'retriedFromOrderId',
+        caseSensitive: caseSensitive,
+      );
     });
   }
 
@@ -4421,6 +4962,19 @@ extension OrderModelQueryProperty
     });
   }
 
+  QueryBuilder<OrderModel, DateTime?, QQueryOperations> incobrableAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'incobrableAt');
+    });
+  }
+
+  QueryBuilder<OrderModel, String?, QQueryOperations>
+  incobrableReasonProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'incobrableReason');
+    });
+  }
+
   QueryBuilder<OrderModel, List<OrderItemModel>, QQueryOperations>
   itemsProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -4469,6 +5023,13 @@ extension OrderModelQueryProperty
   QueryBuilder<OrderModel, String?, QQueryOperations> resolvedCityProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'resolvedCity');
+    });
+  }
+
+  QueryBuilder<OrderModel, String?, QQueryOperations>
+  retriedFromOrderIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'retriedFromOrderId');
     });
   }
 

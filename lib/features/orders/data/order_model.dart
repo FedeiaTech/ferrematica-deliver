@@ -39,6 +39,9 @@ class OrderModel {
     this.pendingBalance,
     this.valorEnvio,
     this.envioPendingBalance,
+    this.retriedFromOrderId,
+    this.incobrableAt,
+    this.incobrableReason,
   });
 
   Id get isarId => fastHash(id);
@@ -93,6 +96,17 @@ class OrderModel {
   /// property — no `@enumerated`, no schema-version bump, same shape as
   /// [pendingBalance]/[valorEnvio].
   final double? envioPendingBalance;
+
+  /// Mirrors [Order.retriedFromOrderId]. Purely additive nullable
+  /// property, same shape as [pendingBalance]/[valorEnvio].
+  final String? retriedFromOrderId;
+
+  /// Mirrors [Order.incobrableAt]. Purely additive nullable property, same
+  /// shape as [pendingBalance]/[valorEnvio].
+  final DateTime? incobrableAt;
+
+  /// Mirrors [Order.incobrableReason]. Purely additive nullable property.
+  final String? incobrableReason;
 }
 
 /// Embedded line item — part of the [OrderModel] row itself, not a separate
@@ -142,6 +156,9 @@ OrderModel orderToModel(Order order) {
     pendingBalance: order.pendingBalance,
     valorEnvio: order.valorEnvio,
     envioPendingBalance: order.envioPendingBalance,
+    retriedFromOrderId: order.retriedFromOrderId,
+    incobrableAt: order.incobrableAt,
+    incobrableReason: order.incobrableReason,
   );
 }
 
@@ -180,6 +197,9 @@ Order orderModelToDomain(OrderModel model) {
     pendingBalance: model.pendingBalance,
     valorEnvio: model.valorEnvio,
     envioPendingBalance: model.envioPendingBalance,
+    retriedFromOrderId: model.retriedFromOrderId,
+    incobrableAt: model.incobrableAt,
+    incobrableReason: model.incobrableReason,
   );
 }
 

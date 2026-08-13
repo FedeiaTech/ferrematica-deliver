@@ -204,7 +204,7 @@ class _OrderDetailBody extends ConsumerWidget {
             ),
           ),
         ],
-        if (order.latitude != null && order.longitude != null) ...[
+        if (order.hasValidCoordinates) ...[
           const SizedBox(height: 16),
           _OrderRouteMapPreview(
             order: order,
@@ -225,6 +225,29 @@ class _OrderDetailBody extends ConsumerWidget {
             valueIcon: Icons.warning_amber_rounded,
           ),
         ],
+        if (order.retriedFromOrderId != null) ...[
+          const SizedBox(height: 8),
+          _RetryLinkRow(
+            label: 'Reintento de',
+            targetOrderId: order.retriedFromOrderId!,
+          ),
+        ],
+        if (!readOnlyForCadete) ...[
+          Builder(
+            builder: (context) {
+              final retryAsync = ref.watch(retryOfOrderProvider(order.id));
+              final retry = retryAsync.value;
+              if (retry == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _RetryLinkRow(
+                  label: 'Reintentado en',
+                  targetOrderId: retry.id,
+                ),
+              );
+            },
+          ),
+        ],
         const SizedBox(height: 16),
         if (linkedVentas.isNotEmpty) ...[
           _LinkedVentasSection(linkedVentas: linkedVentas),
@@ -243,18 +266,48 @@ class _OrderDetailBody extends ConsumerWidget {
           ),
         _DetailRow(
           label: 'Pago',
-          value: (order.paymentStatus != PaymentStatus.cobrado
-                  ? 'Pendiente'
-                  : order.pendingBalance == null
-                  ? 'Pago total'
-                        '${order.amountToCharge != null ? ' (\$${order.amountToCharge!.toStringAsFixed(2)})' : ''}'
-                  : 'Cobro parcial — cobrado '
-                        '\$${(order.amountToCharge! - order.pendingBalance!).toStringAsFixed(2)}, '
-                        'falta \$${order.pendingBalance!.toStringAsFixed(2)}') +
-              (order.envioPendingBalance != null
-                  ? '; cadetería pendiente \$${order.envioPendingBalance!.toStringAsFixed(2)}'
-                  : ''),
+          valueSpans: [
+            if (order.paymentStatus == PaymentStatus.incobrable)
+              TextSpan(
+                text:
+                    'Incobrable'
+                    '${(order.pendingBalance ?? order.amountToCharge) != null ? ' (\$${(order.pendingBalance ?? order.amountToCharge!).toStringAsFixed(2)})' : ''}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else if (order.paymentStatus != PaymentStatus.cobrado)
+              const TextSpan(text: 'Pendiente')
+            else if (order.pendingBalance == null)
+              TextSpan(
+                text:
+                    'Pago total'
+                    '${order.amountToCharge != null ? ' (\$${order.amountToCharge!.toStringAsFixed(2)})' : ''}',
+              )
+            else ...[
+              TextSpan(
+                text:
+                    'Cobro parcial — cobrado '
+                    '\$${(order.amountToCharge! - order.pendingBalance!).toStringAsFixed(2)}, ',
+              ),
+              TextSpan(
+                text: 'falta \$${order.pendingBalance!.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            if (order.envioPendingBalance != null)
+              TextSpan(
+                text: '; cadetería pendiente \$${order.envioPendingBalance!.toStringAsFixed(2)}',
+              ),
+          ],
         ),
+        if (order.paymentStatus == PaymentStatus.incobrable &&
+            order.incobrableReason != null)
+          _DetailRow(label: 'Motivo (incobrable)', value: order.incobrableReason!),
         if (order.status == OrderStatus.entregado && order.deliveredAt != null)
           _DetailRow(
             label: 'Hora de entrega',
@@ -262,19 +315,44 @@ class _OrderDetailBody extends ConsumerWidget {
           ),
         if (order.notes != null)
           _DetailRow(label: 'Notas', value: order.notes!),
+        // Once en_camino, the full "Editar" form is gone (see the Wrap
+        // below) — the note is the one thing still worth touching mid-route
+        // (e.g. the cadete radios in a gate code), so it gets its own
+        // narrow quick-edit instead of reopening the whole order form.
+        if (!readOnlyForCadete && order.status == OrderStatus.enCamino)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _openEditNoteDialog(context, ref, order),
+              icon: const Icon(Icons.edit_note_outlined, size: 18),
+              label: Text(order.notes == null ? 'Agregar nota' : 'Editar nota'),
+            ),
+          ),
         if (order.assignedCadeteId != null)
           _CadeteAssignedRow(cadeteId: order.assignedCadeteId!),
         const SizedBox(height: 24),
-        if (!readOnlyForCadete) ...[
+        // A cancelado order is a dead end by design — the only way "back"
+        // is `canRetry`'s "Reintentar entrega" below, which opens a brand
+        // new order pre-filled from this one. Editing or nudging the pin
+        // on the cancelled record itself would suggest it can be revived
+        // in place, which it can't.
+        if (!readOnlyForCadete && order.status != OrderStatus.cancelado) ...[
           Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => context.push('/orders/${order.id}/edit'),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Editar'),
-              ),
+              // Hidden once en_camino — asignado/no asignado was exactly
+              // the boundary meant to gate this: once the cadete is
+              // actually driving, the order shouldn't be re-editable out
+              // from under them mid-delivery. "Corregir ubicación" stays
+              // available, though — the pin is often MORE important to
+              // get right once someone is actively navigating to it.
+              if (order.status != OrderStatus.enCamino)
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/orders/${order.id}/edit'),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editar'),
+                ),
               OutlinedButton.icon(
                 onPressed: () => _correctLocation(context, ref, order),
                 icon: const Icon(Icons.pin_drop_outlined),
@@ -337,6 +415,18 @@ class _OrderDetailBody extends ConsumerWidget {
                 onPressed: () => context.push('/orders/new', extra: order),
                 icon: const Icon(Icons.replay_outlined),
                 label: const Text('Reintentar entrega'),
+              ),
+            if (!readOnlyForCadete && order.needsPaymentFollowUp)
+              OutlinedButton.icon(
+                onPressed: () => _openMarkIncobrableDialog(context, ref, order),
+                icon: Icon(
+                  Icons.money_off_outlined,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                label: Text(
+                  'Marcar incobrable',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
             if (canCancel)
               OutlinedButton.icon(
@@ -503,9 +593,141 @@ class _OrderDetailBody extends ConsumerWidget {
       ),
     );
     if (reason == null) return;
+    if (!context.mounted) return;
+    final confirmed = await _confirmDeliveryProblem(context, reason);
+    if (!confirmed) return;
     await ref
         .read(ordersControllerProvider.notifier)
         .reportDeliveryProblem(order, reason: reason);
+  }
+
+  /// Reporting a problem cancels the order (`reportDeliveryProblem` sets
+  /// `status: OrderStatus.cancelado`) — a real, hard-to-undo consequence
+  /// the dueño/cadete should see spelled out before it happens, not
+  /// discover after the fact.
+  Future<bool> _confirmDeliveryProblem(BuildContext context, String reason) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reportar problema'),
+        content: Text(
+          'Vas a reportar: "$reason".\n\n'
+          'Esto va a CANCELAR el pedido. ¿Confirmás o preferís cancelar '
+          'esta elección?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  /// Quick-edit for [Order.notes] on an `en_camino` order — the narrow
+  /// replacement for the full "Editar" form once it's hidden (see the
+  /// Wrap above). Blank input clears the note entirely
+  /// (`copyWith(clearNotes: true)`), not just an empty-string leftover.
+  Future<void> _openEditNoteDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final controller = TextEditingController(text: order.notes ?? '');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(order.notes == null ? 'Agregar nota' : 'Editar nota'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Ej: timbre roto, entrar por el fondo'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+    final text = controller.text.trim();
+    await ref
+        .read(ordersControllerProvider.notifier)
+        .updateOrder(
+          text.isEmpty ? order.copyWith(clearNotes: true) : order.copyWith(notes: text),
+        );
+  }
+
+  /// "Marcar incobrable" — writes off [order]'s outstanding debt (see
+  /// [OrdersController.markIncobrable]: final, no undo, `pendingBalance`
+  /// kept as a historical record). Shows the exact amount being written
+  /// off before anything happens, plus an optional free-text reason, same
+  /// confirm-before-consequence shape as [_confirmDeliveryProblem].
+  Future<void> _openMarkIncobrableDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final amount = order.pendingBalance ?? order.amountToCharge;
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Marcar incobrable'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Vas a dar de baja ${amount != null ? '\$${amount.toStringAsFixed(2)}' : 'la deuda'} '
+              'de este pedido como incobrable. Esto NO se puede deshacer — '
+              'si el cliente paga más adelante, se registra como un cobro '
+              'aparte. ¿Confirmás?',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional)',
+                hintText: 'Por qué quedó incobrable',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+    final reason = reasonController.text.trim();
+    await ref
+        .read(ordersControllerProvider.notifier)
+        .markIncobrable(order, reason: reason.isEmpty ? null : reason);
   }
 
   Future<String?> _promptCustomProblem(BuildContext context) {
@@ -1022,19 +1244,25 @@ class _OrderRouteMapPreview extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final target = NavigationTarget(
-      orderId: order.id,
-      latitude: order.latitude!,
-      longitude: order.longitude!,
-    );
-    final routeAsync = ref.watch(navigationRouteProvider(target));
     final destination = latlong.LatLng(order.latitude!, order.longitude!);
+    // A `cancelado`/`entregado` order is a closed case — there's no
+    // "current device location" worth tracking and no route left to drive,
+    // so this skips `navigationRouteProvider` entirely (no Directions call,
+    // no location permission prompt) and shows the destination pin alone,
+    // colored green like `orderStatusColor`'s `entregado` to read as
+    // "done" at a glance instead of the active/pending red.
+    final isTerminal =
+        order.status == OrderStatus.entregado || order.status == OrderStatus.cancelado;
     final destinationMarker = Marker(
       point: destination,
       width: 40,
       height: 40,
       alignment: Alignment.topCenter,
-      child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
+      child: Icon(
+        Icons.location_pin,
+        color: isTerminal ? Colors.green.shade700 : Colors.red,
+        size: 40,
+      ),
     );
 
     void openFullMap() =>
@@ -1049,11 +1277,24 @@ class _OrderRouteMapPreview extends ConsumerWidget {
           child: Stack(
             children: [
               Positioned.fill(
-                child: _RouteMapPreviewContent(
-                  routeAsync: routeAsync,
-                  destination: destination,
-                  destinationMarker: destinationMarker,
-                ),
+                child: isTerminal
+                    ? _StaticLocationMapPreview(
+                        destination: destination,
+                        destinationMarker: destinationMarker,
+                      )
+                    : _RouteMapPreviewContent(
+                        routeAsync: ref.watch(
+                          navigationRouteProvider(
+                            NavigationTarget(
+                              orderId: order.id,
+                              latitude: order.latitude!,
+                              longitude: order.longitude!,
+                            ),
+                          ),
+                        ),
+                        destination: destination,
+                        destinationMarker: destinationMarker,
+                      ),
               ),
               // Explicit affordance to open the full interactive map before
               // the trip starts (not just once "Iniciar navegación" is
@@ -1079,6 +1320,40 @@ class _OrderRouteMapPreview extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Marker-only map for a terminal (`entregado`/`cancelado`) order — no
+/// `navigationRouteProvider` watch, so no live location fetch or Directions
+/// call happens for an order that's no longer being driven to.
+class _StaticLocationMapPreview extends StatelessWidget {
+  const _StaticLocationMapPreview({
+    required this.destination,
+    required this.destinationMarker,
+  });
+
+  final latlong.LatLng destination;
+  final Marker destinationMarker;
+
+  @override
+  Widget build(BuildContext context) {
+    return FlutterMap(
+      options: MapOptions(
+        initialCenter: destination,
+        initialZoom: 14,
+        interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.ferrematica.express',
+        ),
+        MarkerLayer(markers: [destinationMarker]),
+        RichAttributionWidget(
+          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+        ),
+      ],
     );
   }
 }
@@ -1426,13 +1701,63 @@ class _PricingSummary extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value, this.valueIcon});
+/// Tappable [_DetailRow]-shaped link to another order in the same retry
+/// chain — either the order this one was retried FROM
+/// ([Order.retriedFromOrderId]) or the retry created FROM this one
+/// ([retryOfOrderProvider]). Always navigates to `/orders/:id`, a
+/// dueño-only route, so both call sites gate this to `!readOnlyForCadete`.
+class _RetryLinkRow extends StatelessWidget {
+  const _RetryLinkRow({required this.label, required this.targetOrderId});
 
   final String label;
-  final String value;
+  final String targetOrderId;
 
-  /// Shown before [value] when set — e.g. a red warning icon on the
+  @override
+  Widget build(BuildContext context) {
+    final linkColor = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: () => context.push('/orders/$targetOrderId'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            Icon(Icons.replay_outlined, size: 18, color: linkColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Ver pedido',
+                style: TextStyle(color: linkColor, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, this.value, this.valueSpans, this.valueIcon})
+    : assert(
+        (value == null) != (valueSpans == null),
+        'pass exactly one of value or valueSpans',
+      );
+
+  final String? value;
+
+  /// Alternative to [value] for a row that needs mixed styling within a
+  /// single line (e.g. the still-owed portion of "Pago" in red) — pass
+  /// this instead of [value] when a single [TextStyle] can't express it.
+  final List<InlineSpan>? valueSpans;
+
+  final String label;
+
+  /// Shown before the value when set — e.g. a red warning icon on the
   /// "Problema reportado" row, so a failed delivery stands out at a
   /// glance instead of reading identically to every other detail row.
   final IconData? valueIcon;
@@ -1459,7 +1784,16 @@ class _DetailRow extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          Expanded(child: Text(value)),
+          Expanded(
+            child: valueSpans != null
+                ? Text.rich(
+                    TextSpan(
+                      style: DefaultTextStyle.of(context).style,
+                      children: valueSpans,
+                    ),
+                  )
+                : Text(value!),
+          ),
         ],
       ),
     );

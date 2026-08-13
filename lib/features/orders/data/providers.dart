@@ -1,8 +1,10 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
 import '../../../core/database/providers.dart';
 import '../../../core/supabase/providers.dart';
+import '../../auth/data/providers.dart' show authRepositoryProvider;
 import '../domain/orders_repository.dart';
 import 'isar_orders_repository.dart';
 import 'order_sync_service.dart';
@@ -37,6 +39,7 @@ final Provider<OrderSyncService> orderSyncServiceProvider = Provider<OrderSyncSe
     remote: ref.watch(ordersRemoteProvider),
     isar: ref.watch(isarProvider),
     connectivityStream: ref.watch(connectivityProvider),
+    sessionStream: ref.watch(authRepositoryProvider).watchSession(),
   );
 
   if (repository is IsarOrdersRepository) {
@@ -55,13 +58,24 @@ final Provider<VentasRemote> ventasRemoteProvider = Provider<VentasRemote>(
   (ref) => SupabaseVentasRemote(ref.watch(supabaseProvider)),
 );
 
+/// The day-window filter selected in `venta_picker_sheet.dart` — "Día"
+/// (1), "Semana" (7, the RPC's own default), or "Mes" (30). `autoDispose`
+/// so it resets to the default every time the picker is reopened, instead
+/// of remembering the last-picked window across separate pedido-creation
+/// sessions.
+final StateProvider<int> ventaPickerDiasProvider = StateProvider.autoDispose<int>((ref) => 7);
+
 /// Fetches the ventas eligible for the "desde venta" pedido picker
-/// (`order-prefill-from-venta` spec domain). `autoDispose` so the list is
-/// re-fetched fresh every time the picker is opened, instead of holding a
-/// stale cache between pedido-creation sessions.
+/// (`order-prefill-from-venta` spec domain), scoped to
+/// [ventaPickerDiasProvider]'s currently selected window. `autoDispose` so
+/// the list is re-fetched fresh every time the picker is opened (or the
+/// window filter changes), instead of holding a stale cache between
+/// pedido-creation sessions.
 final FutureProvider<List<VentaDisponible>> ventasDisponiblesProvider =
     FutureProvider.autoDispose<List<VentaDisponible>>(
-      (ref) => ref.watch(ventasRemoteProvider).fetchDisponibles(),
+      (ref) => ref
+          .watch(ventasRemoteProvider)
+          .fetchDisponibles(dias: ref.watch(ventaPickerDiasProvider)),
     );
 
 /// Every venta linked to the order [orderId] — `order_detail_screen.dart`

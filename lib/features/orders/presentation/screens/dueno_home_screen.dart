@@ -74,7 +74,17 @@ class _DuenoHomeScreenState extends ConsumerState<DuenoHomeScreen> {
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tabIndex,
-          onDestinationSelected: (index) => setState(() => _tabIndex = index),
+          onDestinationSelected: (index) {
+            // The `IndexedStack` below keeps every tab mounted (Productos'
+            // search field included), so a focused `TextField` left behind
+            // on tab-switch stays the app's primary focus even while
+            // hidden. Without this, later pushing/popping an unrelated
+            // route (e.g. opening an order from Pedidos) can make Android
+            // redisplay the soft keyboard for that still-focused, now
+            // invisible field.
+            FocusScope.of(context).unfocus();
+            setState(() => _tabIndex = index);
+          },
           destinations: const [
             NavigationDestination(icon: Icon(Icons.list_alt_outlined), label: 'Pedidos'),
             NavigationDestination(icon: Icon(Icons.bar_chart_outlined), label: 'Estadísticas'),

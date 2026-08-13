@@ -10,6 +10,9 @@ Order _buildOrder({
   double? pendingBalance,
   double? valorEnvio,
   double? envioPendingBalance,
+  double? latitude,
+  double? longitude,
+  String? notes,
 }) {
   final now = DateTime(2026, 1, 1);
   return Order(
@@ -25,6 +28,9 @@ Order _buildOrder({
     pendingBalance: pendingBalance,
     valorEnvio: valorEnvio,
     envioPendingBalance: envioPendingBalance,
+    latitude: latitude,
+    longitude: longitude,
+    notes: notes,
   );
 }
 
@@ -57,6 +63,38 @@ void main() {
     test('false when both amountToCharge and paymentMethod are set', () {
       final order = _buildOrder(amountToCharge: 100, paymentMethod: PaymentMethod.efectivo);
       expect(order.isIncomplete, isFalse);
+    });
+  });
+
+  group('Order.hasValidCoordinates', () {
+    test('false when latitude/longitude are both null', () {
+      final order = _buildOrder();
+      expect(order.hasValidCoordinates, isFalse);
+    });
+
+    test('true for an ordinary in-range pair', () {
+      final order = _buildOrder(latitude: -31.65, longitude: -60.72);
+      expect(order.hasValidCoordinates, isTrue);
+    });
+
+    test('false when latitude is NaN', () {
+      final order = _buildOrder(latitude: double.nan, longitude: -60.72);
+      expect(order.hasValidCoordinates, isFalse);
+    });
+
+    test('false when longitude is infinite', () {
+      final order = _buildOrder(latitude: -31.65, longitude: double.infinity);
+      expect(order.hasValidCoordinates, isFalse);
+    });
+
+    test('false when latitude is out of the -90..90 range', () {
+      final order = _buildOrder(latitude: 91, longitude: -60.72);
+      expect(order.hasValidCoordinates, isFalse);
+    });
+
+    test('false when longitude is out of the -180..180 range', () {
+      final order = _buildOrder(latitude: -31.65, longitude: 181);
+      expect(order.hasValidCoordinates, isFalse);
     });
   });
 
@@ -191,6 +229,32 @@ void main() {
         ),
         throwsA(isA<AssertionError>()),
       );
+    });
+  });
+
+  group('Order.copyWith clearNotes', () {
+    test('keeps the existing notes when not touched', () {
+      final order = _buildOrder(notes: 'timbre roto');
+
+      final updated = order.copyWith(amountToCharge: 100);
+
+      expect(updated.notes, 'timbre roto');
+    });
+
+    test('sets new notes when provided', () {
+      final order = _buildOrder(notes: 'timbre roto');
+
+      final updated = order.copyWith(notes: 'entrar por el fondo');
+
+      expect(updated.notes, 'entrar por el fondo');
+    });
+
+    test('clearNotes explicitly nulls the field, ignoring an empty-string leftover', () {
+      final order = _buildOrder(notes: 'timbre roto');
+
+      final updated = order.copyWith(clearNotes: true);
+
+      expect(updated.notes, isNull);
     });
   });
 
@@ -460,6 +524,25 @@ void main() {
         final restored = PaymentStatus.values.byName(status.name);
         expect(restored, status);
       }
+    });
+  });
+
+  group('PaymentStatus enum declaration order (Isar ordinal regression)', () {
+    // Same rationale as `OrderStatus`'s ordinal regression group above:
+    // `OrderModel.paymentStatus` is also `@enumerated` (ordinal storage).
+    // `incobrable` was deliberately appended at the END of the
+    // `PaymentStatus` declaration so `pendiente`/`cobrado`'s ordinals stay
+    // fixed for every existing local Isar row.
+    test('pendiente keeps ordinal 0', () {
+      expect(PaymentStatus.values.indexOf(PaymentStatus.pendiente), 0);
+    });
+
+    test('cobrado keeps ordinal 1', () {
+      expect(PaymentStatus.values.indexOf(PaymentStatus.cobrado), 1);
+    });
+
+    test('incobrable was appended at ordinal 2, not inserted mid-enum', () {
+      expect(PaymentStatus.values.indexOf(PaymentStatus.incobrable), 2);
     });
   });
 

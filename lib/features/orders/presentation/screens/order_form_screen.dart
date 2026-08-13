@@ -125,8 +125,26 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
     // of "Factura Nº ..." and _removeVenta can't subtract the right amount
     // when un-picking a pre-existing venta during an edit.
     final existing = _existing;
+    final prefillFrom = widget.prefillFrom;
     if (existing != null && _items.any((item) => item.sourceVentaId != null)) {
       _backfillVentaBookkeeping(existing.id);
+    } else if (existing == null &&
+        prefillFrom != null &&
+        _items.any((item) => item.sourceVentaId != null)) {
+      // A retry is a brand-new order (design: "the original stays untouched
+      // as a permanent record"), so unlike editing, its carried-over
+      // venta-sourced lines DO need a fresh claim on submit — cancelling
+      // `prefillFrom` released those ventas server-side (see
+      // venta_order_links_release_on_cancel,
+      // 0016_venta_release_on_cancel.sql), so re-adding them to
+      // `_selectedVentaIds` here makes `_submit`'s `fromVentaIds` actually
+      // re-link them instead of silently creating an unlinked order. If the
+      // release hasn't synced yet (offline retry), the claim just fails
+      // with `VentaYaVinculadaException`, already handled below.
+      _selectedVentaIds.addAll(
+        _items.map((item) => item.sourceVentaId).whereType<String>().toSet(),
+      );
+      _backfillVentaBookkeeping(prefillFrom.id);
     }
   }
 
@@ -268,6 +286,7 @@ class _OrderFormScreenState extends ConsumerState<OrderFormScreen> {
           items: _items,
           cityHint: cityHint,
           fromVentaIds: _selectedVentaIds,
+          retriedFromOrderId: widget.prefillFrom?.id,
         );
       } else {
         await controller.updateOrder(

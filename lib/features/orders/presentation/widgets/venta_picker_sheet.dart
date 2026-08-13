@@ -47,9 +47,14 @@ class _VentaPickerSheetContent extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Text('Elegí una venta del POS'),
             ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: _DiasFilterChips(),
+            ),
+            const SizedBox(height: 8),
             Flexible(
               child: ventasAsync.when(
                 data: (allVentas) {
@@ -105,6 +110,36 @@ class _VentaPickerSheetContent extends ConsumerWidget {
     final local = fecha.toLocal();
     String two(int value) => value.toString().padLeft(2, '0');
     return '${two(local.day)}/${two(local.month)} ${two(local.hour)}:${two(local.minute)}';
+  }
+}
+
+/// Día/Semana/Mes filter for the "desde venta" picker — drives
+/// [ventaPickerDiasProvider], which [ventasDisponiblesProvider] re-fetches
+/// from whenever it changes. A fixed 3-way choice (not a date-range picker)
+/// mirrors `delivery_stats_screen.dart`'s period selector for the same
+/// reason: a POS sale eligible for this picker is by definition recent
+/// (`ventas_disponibles()`'s own default window is 7 days), so a handful of
+/// coarse buckets covers the real use case without the extra UI weight of
+/// custom dates.
+class _DiasFilterChips extends ConsumerWidget {
+  const _DiasFilterChips();
+
+  static const _opciones = [(dias: 1, label: 'Día'), (dias: 7, label: 'Semana'), (dias: 30, label: 'Mes')];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diasSeleccionado = ref.watch(ventaPickerDiasProvider);
+    return Wrap(
+      spacing: 8,
+      children: [
+        for (final opcion in _opciones)
+          ChoiceChip(
+            label: Text(opcion.label),
+            selected: diasSeleccionado == opcion.dias,
+            onSelected: (_) => ref.read(ventaPickerDiasProvider.notifier).state = opcion.dias,
+          ),
+      ],
+    );
   }
 }
 
