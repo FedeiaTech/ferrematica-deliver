@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/data/providers.dart' show authRepositoryProvider;
 import '../../features/auth/domain/app_session.dart' show UserRole;
+import '../theme/background_color_picker.dart';
 
 /// Confirms the user wants to close the app rather than exiting immediately
 /// on the first back-press from a root tab (`DuenoHomeScreen`/
@@ -34,9 +35,9 @@ Future<bool> confirmExit(BuildContext context) async {
 /// dueño-only "Nuevo cadete" entry — a cadete session never sees it, even
 /// though the route itself is already redirect-gated (`app_router.dart`)
 /// as defense in depth.
-void showAccountMenu(BuildContext context, WidgetRef ref, {required UserRole role}) {
+void showAccountMenu(BuildContext outerContext, WidgetRef ref, {required UserRole role}) {
   showModalBottomSheet<void>(
-    context: context,
+    context: outerContext,
     builder: (context) => SafeArea(
       child: Wrap(
         children: [
@@ -49,6 +50,18 @@ void showAccountMenu(BuildContext context, WidgetRef ref, {required UserRole rol
                 context.push('/orders/cadetes/new');
               },
             ),
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('Color de fondo'),
+            onTap: () {
+              Navigator.of(context).pop();
+              // Opens a *new* bottom sheet right after popping this one —
+              // reuses `outerContext` (the still-mounted screen below),
+              // not the shadowed `context` above, which belongs to the
+              // sheet that's mid-dismissal by the time this runs.
+              showBackgroundColorPicker(outerContext, ref);
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Cerrar sesión'),
