@@ -68,7 +68,7 @@ class NavigationMapScreen extends ConsumerWidget {
           if (order == null) {
             return const Center(child: Text('Pedido no encontrado.'));
           }
-          if (order.latitude == null || order.longitude == null) {
+          if (!order.hasValidCoordinates) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -265,9 +265,22 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody>
           _animatedMapController.animateTo(dest: currentPoint, rotation: 0);
         } else {
           _animatedMapController.animatedFitCamera(
+            // `CameraFit.coordinates` defaults `maxZoom` to
+            // `double.infinity` — if `framePoints` ever project to a
+            // degenerate (zero-width or zero-height) bounding box (e.g.
+            // the live position and destination coincide almost exactly,
+            // a real case right before arrival), its internal zoom
+            // calculation divides by that zero size and produces
+            // `Infinity`, which then crashes `TileLayer` on the next
+            // build (`Infinity.floor()`, `Unsupported operation`) — not
+            // caught by this method's own try/catch, since that failure
+            // happens on a LATER frame, not synchronously here. Capping
+            // `maxZoom` here (matching `_fiveBlockZoom`'s intent) makes
+            // that impossible regardless of how degenerate the points are.
             cameraFit: CameraFit.coordinates(
               coordinates: framePoints,
               padding: const EdgeInsets.all(48),
+              maxZoom: _fiveBlockZoom,
             ),
             rotation: 0,
           );
@@ -547,6 +560,19 @@ class _NavigationMapBodyState extends ConsumerState<_NavigationMapBody>
         // radius), per the dueño's feedback that the previous default
         // (14→16) was too zoomed out for that.
         initialZoom: 17,
+        // Belt-and-suspenders against any camera update — `animateTo`,
+        // `animatedFitCamera`, the live-position ticks, ANY of them —
+        // ever landing on an out-of-range zoom. `_applyCameraPose`'s own
+        // `CameraFit.coordinates(maxZoom: ...)` only guards its own
+        // north-up branch; the default heading-up branch calls
+        // `animateTo` directly with no clamp of its own. flutter_map
+        // enforces `MapOptions.maxZoom`/`minZoom` at the `MapCamera`
+        // level for every camera-changing call, regardless of which one
+        // produced an out-of-range value — this is the one place that
+        // protects all of them at once instead of each call site
+        // individually.
+        maxZoom: 19,
+        minZoom: 3,
         onPositionChanged: (camera, hasGesture) {
           if (!hasGesture) return;
           if (_followMe) setState(() => _followMe = false);
