@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:isar_community/isar.dart';
 
+import '../../auth/domain/app_session.dart';
 import '../domain/order.dart';
 import '../domain/orders_repository.dart';
 import 'supabase_orders_remote.dart';
@@ -22,9 +23,14 @@ import 'sync_cursor.dart';
 /// - **Pull**: fetches remote rows updated since the last successful pull
 ///   (persisted in [SyncCursorModel]) and merges them into Isar, never
 ///   overwriting a local row that is itself still `pending`.
-/// - **Triggers**: connectivity regained, app resumed, and immediately
-///   after a local write (via [OrdersRepository]'s optional `onWrite`
-///   hook) — all fire-and-forget; the UI never awaits sync.
+/// - **Triggers**: connectivity regained, app resumed, a session becoming
+///   available (cold start races the login screen — the very first
+///   [start] call fires before the user has authenticated, so that
+///   attempt is a silent no-op against RLS; draining again once
+///   [sessionStream] emits a non-null [AppSession] is what actually
+///   populates the dashboard after a fresh login/reinstall), and
+///   immediately after a local write (via [OrdersRepository]'s optional
+///   `onWrite` hook) — all fire-and-forget; the UI never awaits sync.
 /// - **Backoff**: a failed push is retried on the next drain only after an
 ///   in-memory exponential backoff (1s, 2s, 4s, ... capped at 60s) per
 ///   order id, so a persistently failing row doesn't spam every drain
@@ -35,10 +41,12 @@ class OrderSyncService with WidgetsBindingObserver {
     required OrdersRemote remote,
     required Isar isar,
     required Stream<List<ConnectivityResult>> connectivityStream,
+    required Stream<AppSession?> sessionStream,
   }) : _repository = repository,
        _remote = remote,
        _isar = isar,
-       _connectivityStream = connectivityStream;
+       _connectivityStream = connectivityStream,
+       _sessionStream = sessionStream;
 
   static const Duration _maxBackoff = Duration(seconds: 60);
 
@@ -46,20 +54,28 @@ class OrderSyncService with WidgetsBindingObserver {
   final OrdersRemote _remote;
   final Isar _isar;
   final Stream<List<ConnectivityResult>> _connectivityStream;
+  final Stream<AppSession?> _sessionStream;
 
   final Map<String, int> _failureCounts = <String, int>{};
   final Map<String, DateTime> _nextRetryAt = <String, DateTime>{};
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<AppSession?>? _sessionSubscription;
   bool _draining = false;
   bool _drainQueued = false;
 
-  /// Starts listening for connectivity-regained and app-resume events.
-  /// Call once when the service is created (see `providers.dart`).
+  /// Starts listening for connectivity-regained, app-resume, and
+  /// session-available events. Call once when the service is created (see
+  /// `providers.dart`).
   void start() {
     WidgetsBinding.instance.addObserver(this);
     _connectivitySubscription = _connectivityStream.listen((results) {
       if (results.any((result) => result != ConnectivityResult.none)) {
+        unawaited(drain());
+      }
+    });
+    _sessionSubscription = _sessionStream.listen((session) {
+      if (session != null) {
         unawaited(drain());
       }
     });
@@ -70,6 +86,7 @@ class OrderSyncService with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_connectivitySubscription?.cancel());
+    unawaited(_sessionSubscription?.cancel());
   }
 
   @override

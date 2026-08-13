@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:ferrematica_express/features/auth/domain/app_session.dart';
 import 'package:ferrematica_express/features/orders/data/order_sync_service.dart';
 import 'package:ferrematica_express/features/orders/data/supabase_orders_remote.dart';
 import 'package:ferrematica_express/features/orders/domain/order.dart';
@@ -42,6 +43,7 @@ void main() {
   late MockOrdersRepository repository;
   late MockOrdersRemote remote;
   late StreamController<List<ConnectivityResult>> connectivityController;
+  late StreamController<AppSession?> sessionController;
   late OrderSyncService service;
 
   setUp(() async {
@@ -49,6 +51,7 @@ void main() {
     repository = MockOrdersRepository();
     remote = MockOrdersRemote();
     connectivityController = StreamController<List<ConnectivityResult>>.broadcast();
+    sessionController = StreamController<AppSession?>.broadcast();
 
     when(() => repository.pendingSync()).thenAnswer((_) async => <Order>[]);
     when(() => repository.markSynced(any())).thenAnswer((_) async {});
@@ -62,12 +65,14 @@ void main() {
       remote: remote,
       isar: isar,
       connectivityStream: connectivityController.stream,
+      sessionStream: sessionController.stream,
     );
   });
 
   tearDown(() async {
     service.dispose();
     await connectivityController.close();
+    await sessionController.close();
     await closeTestIsar(isar);
   });
 
@@ -195,6 +200,39 @@ void main() {
       clearInteractions(repository);
 
       connectivityController.add(<ConnectivityResult>[ConnectivityResult.none]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      verifyNever(() => repository.pendingSync());
+    });
+  });
+
+  group('session trigger', () {
+    test(
+      'a session becoming available triggers a drain — the cold-start drain '
+      'races the login screen and is a no-op against RLS before the user '
+      'authenticates, so this is what actually populates the dashboard '
+      'after a fresh login/reinstall',
+      () async {
+        // `start()` itself fires an initial cold-start drain — let that
+        // settle and reset call tracking before asserting on the event
+        // under test, so this only verifies the session event's own effect.
+        service.start();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        clearInteractions(repository);
+
+        sessionController.add(const AppSession(userId: 'user-1', rol: UserRole.dueno));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        verify(() => repository.pendingSync()).called(1);
+      },
+    );
+
+    test('a null session event (sign-out) does not trigger an additional drain', () async {
+      service.start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      clearInteractions(repository);
+
+      sessionController.add(null);
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       verifyNever(() => repository.pendingSync());
