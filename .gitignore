@@ -53,3 +53,13 @@ dart_define.json
 /libisar.dll
 /libisar.so
 /libisar.dylib
+
+# Supabase CLI, installed locally as a devDependency (npm install supabase
+# --save-dev) so `npx supabase` works without a global/scoop/choco install.
+node_modules/
+package-lock.json
+package.json
+
+# Supabase CLI's own local/machine-specific state (which project is
+# linked) — never shared across machines, never source.
+supabase/.temp/
