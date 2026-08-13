@@ -7,6 +7,7 @@ import 'core/database/providers.dart';
 import 'core/router/app_router.dart';
 import 'core/supabase/providers.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/background_color_provider.dart';
 import 'features/orders/data/providers.dart' show orderSyncServiceProvider;
 
 Future<void> main() async {
@@ -37,10 +38,11 @@ class FerrematicaApp extends ConsumerWidget {
     // background. Value never changes once built, so this never causes an
     // extra rebuild.
     ref.watch(orderSyncServiceProvider);
+    final background = ref.watch(backgroundColorProvider);
 
     return MaterialApp.router(
       title: 'Ferremática Express',
-      theme: AppTheme.light,
+      theme: AppTheme.light(background.color),
       darkTheme: AppTheme.dark,
       routerConfig: router,
     );
