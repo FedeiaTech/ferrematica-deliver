@@ -32,9 +32,12 @@ Future<bool> confirmExit(BuildContext context) async {
 
 /// Account menu opened by tapping the role label in `SectionBanner`. Shared
 /// by both `DuenoHomeScreen` and `CadeteHomeScreen`, so [role] gates the
-/// dueño-only "Nuevo cadete" entry — a cadete session never sees it, even
-/// though the route itself is already redirect-gated (`app_router.dart`)
-/// as defense in depth.
+/// dueño-only "Administrar cadetes" entry — a cadete session never sees
+/// it, even though the route itself is already redirect-gated
+/// (`app_router.dart`) as defense in depth. Alta ("Nuevo cadete") now
+/// lives inside `ManageCadetesScreen`'s own app bar action rather than a
+/// separate menu entry, so a dueño has a single "cadetes" destination
+/// covering the full CRUD instead of two disconnected ones.
 void showAccountMenu(BuildContext outerContext, WidgetRef ref, {required UserRole role}) {
   showModalBottomSheet<void>(
     context: outerContext,
@@ -43,11 +46,11 @@ void showAccountMenu(BuildContext outerContext, WidgetRef ref, {required UserRol
         children: [
           if (role == UserRole.dueno)
             ListTile(
-              leading: const Icon(Icons.person_add_alt_outlined),
-              title: const Text('Nuevo cadete'),
+              leading: const Icon(Icons.groups_outlined),
+              title: const Text('Administrar cadetes'),
               onTap: () {
                 Navigator.of(context).pop();
-                context.push('/orders/cadetes/new');
+                context.push('/orders/cadetes');
               },
             ),
           ListTile(

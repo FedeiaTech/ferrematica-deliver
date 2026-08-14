@@ -29,6 +29,7 @@ class CreateCadeteScreen extends ConsumerStatefulWidget {
 class _CreateCadeteScreenState extends ConsumerState<CreateCadeteScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
+  final _nroController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
@@ -36,6 +37,7 @@ class _CreateCadeteScreenState extends ConsumerState<CreateCadeteScreen> {
   @override
   void dispose() {
     _nombreController.dispose();
+    _nroController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -69,18 +71,20 @@ class _CreateCadeteScreenState extends ConsumerState<CreateCadeteScreen> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    final nroText = _nroController.text.trim();
     final controller = ref.read(createCadeteControllerProvider.notifier);
     await controller.create(
       email: _emailController.text.trim(),
       password: _passwordController.text,
       nombre: _nombreController.text.trim(),
+      nro: nroText.isEmpty ? null : int.tryParse(nroText),
     );
     if (!mounted) return;
 
     final state = ref.read(createCadeteControllerProvider);
     if (state.hasError) {
       final error = state.error;
-      final message = error is CadeteCreationException
+      final message = error is CadeteDirectoryException
           ? error.message
           : 'No se pudo crear el cadete. Intentá de nuevo.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -116,6 +120,22 @@ class _CreateCadeteScreenState extends ConsumerState<CreateCadeteScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return 'El nombre es obligatorio';
                 }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _nroController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Número de cadete (opcional)',
+                helperText: 'Lo definís vos — se usa para identificarlo en estadísticas.',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final trimmed = value?.trim() ?? '';
+                if (trimmed.isEmpty) return null;
+                if (int.tryParse(trimmed) == null) return 'Ingresá solo números';
                 return null;
               },
             ),

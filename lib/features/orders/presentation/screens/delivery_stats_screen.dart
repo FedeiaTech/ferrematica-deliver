@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 
 import '../../../auth/domain/app_session.dart';
 import '../../../auth/domain/cadete_directory.dart';
-import '../../../auth/presentation/providers.dart' show cadeteListProvider, sessionProvider;
+import '../../../auth/presentation/providers.dart' show allCadetesProvider, sessionProvider;
 import '../../../delivery/presentation/providers.dart' show cadeteOrdersProvider;
 import '../../domain/order.dart';
 import '../providers.dart' show ordersStreamProvider;
@@ -14,6 +14,14 @@ enum _StatsPeriod { hoy, semana, mes }
 final StateProvider<_StatsPeriod> _statsPeriodProvider = StateProvider<_StatsPeriod>(
   (ref) => _StatsPeriod.hoy,
 );
+
+/// Dueño-only cadete filter — `null` means "todos" (no filtering, the
+/// screen's original behavior: one card per assignee with any activity in
+/// the period). Backed by [allCadetesProvider] rather than the
+/// active-only cadete list, so the dueño can still pull up a since-
+/// deactivated cadete's historical numbers — see
+/// `CadeteDirectory.listAllCadetes`'s doc comment for the full rationale.
+final StateProvider<String?> _statsCadeteFilterProvider = StateProvider<String?>((ref) => null);
 
 /// Reference date the selected period is computed around — "Hoy"/"Semana"/
 /// "Mes" describe the CURRENT day/week/month only when this equals
@@ -105,9 +113,10 @@ class DeliveryStatsScreen extends ConsumerWidget {
     final ordersAsync = isDueno
         ? ref.watch(ordersStreamProvider)
         : ref.watch(cadeteOrdersProvider);
-    final cadetesAsync = ref.watch(cadeteListProvider);
+    final cadetesAsync = ref.watch(allCadetesProvider);
     final period = ref.watch(_statsPeriodProvider);
     final anchor = ref.watch(_statsAnchorProvider);
+    final cadeteFilter = ref.watch(_statsCadeteFilterProvider);
 
     return Scaffold(
       body: session == null
@@ -120,6 +129,7 @@ class DeliveryStatsScreen extends ConsumerWidget {
                 cadetesAsync: cadetesAsync,
                 period: period,
                 anchor: anchor,
+                cadeteFilter: cadeteFilter,
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) =>
@@ -137,6 +147,7 @@ class _StatsBody extends StatelessWidget {
     required this.cadetesAsync,
     required this.period,
     required this.anchor,
+    required this.cadeteFilter,
   });
 
   final List<Order> orders;
@@ -145,6 +156,11 @@ class _StatsBody extends StatelessWidget {
   final AsyncValue<List<CadeteProfile>> cadetesAsync;
   final DateTime anchor;
   final _StatsPeriod period;
+
+  /// Selected cadete id from [_statsCadeteFilterProvider], or `null` for
+  /// "todos". Only meaningful when [isDueno] — a cadete session only ever
+  /// sees their own numbers regardless.
+  final String? cadeteFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -269,12 +285,20 @@ class _StatsBody extends StatelessWidget {
     }
 
     final assigneeIds = byAssignee.keys.toSet()..addAll(problemsByAssignee.keys);
-    final sortedIds = assigneeIds.toList()..sort((a, b) => nameFor(a).compareTo(nameFor(b)));
+    final allSortedIds = assigneeIds.toList()..sort((a, b) => nameFor(a).compareTo(nameFor(b)));
+    // Narrow to the selected cadete, if any — computed AFTER the full
+    // per-assignee maps above so the filter is purely a display concern,
+    // never affecting how totals are bucketed.
+    final sortedIds = cadeteFilter == null
+        ? allSortedIds
+        : allSortedIds.where((id) => id == cadeteFilter).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _PeriodSelector(period: period, anchor: anchor),
+        const SizedBox(height: 12),
+        _CadeteFilterDropdown(cadetesAsync: cadetesAsync, selected: cadeteFilter),
         const SizedBox(height: 16),
         if (sortedIds.isEmpty)
           const Padding(
@@ -444,6 +468,54 @@ class _PeriodSelector extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Dueño-only "filtrar por cadete" dropdown, admin-gated the same way
+/// `ManageCadetesScreen` is (this whole `_StatsBody` branch only renders
+/// when `isDueno`). Options are labeled via [CadeteProfile.displayLabel]
+/// ("#03 - Carlos"), sourced from [cadetesAsync] (`allCadetesProvider` —
+/// active and inactive, so a since-deactivated cadete's history stays
+/// reachable). A leading "Todos los cadetes" entry (`value: null`) clears
+/// the filter back to the screen's original all-assignees view.
+class _CadeteFilterDropdown extends ConsumerWidget {
+  const _CadeteFilterDropdown({required this.cadetesAsync, required this.selected});
+
+  final AsyncValue<List<CadeteProfile>> cadetesAsync;
+  final String? selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return cadetesAsync.maybeWhen(
+      data: (cadetes) {
+        if (cadetes.isEmpty) return const SizedBox.shrink();
+        // Semi-transparent white fill, matching the period chips/anchor
+        // label above so this control reads consistently against a
+        // custom `BrandBackground`.
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              isExpanded: true,
+              value: selected,
+              icon: const Icon(Icons.filter_list),
+              hint: const Text('Filtrar por cadete'),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Todos los cadetes')),
+                for (final cadete in cadetes)
+                  DropdownMenuItem<String?>(value: cadete.id, child: Text(cadete.displayLabel)),
+              ],
+              onChanged: (value) => ref.read(_statsCadeteFilterProvider.notifier).state = value,
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
     );
   }
 }

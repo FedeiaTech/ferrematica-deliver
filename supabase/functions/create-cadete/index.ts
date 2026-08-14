@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
   // ---------------------------------------------------------------------
   // 1. Parse + minimally validate the request body.
   // ---------------------------------------------------------------------
-  let body: { email?: unknown; password?: unknown; nombre?: unknown };
+  let body: { email?: unknown; password?: unknown; nombre?: unknown; nro?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -79,6 +79,18 @@ Deno.serve(async (req: Request) => {
       { error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` },
       400,
     );
+  }
+
+  // `nro` is optional (the dueño may not have a number ready yet) but, when
+  // present, must be a genuine integer — `Number.isInteger` rejects floats,
+  // NaN, and strings that merely *look* numeric, so a typo like "3a" fails
+  // loudly here instead of silently coercing to something unexpected.
+  let nro: number | null = null;
+  if (body.nro !== undefined && body.nro !== null) {
+    if (typeof body.nro !== 'number' || !Number.isInteger(body.nro)) {
+      return jsonResponse({ error: 'El número de cadete debe ser un entero.' }, 400);
+    }
+    nro = body.nro;
   }
 
   // ---------------------------------------------------------------------
@@ -155,6 +167,7 @@ Deno.serve(async (req: Request) => {
     id: newUserId,
     rol: 'cadete',
     full_name: nombre || null,
+    nro,
     active: true,
   });
 
@@ -164,9 +177,17 @@ Deno.serve(async (req: Request) => {
     // (which `SupabaseAuthRepository._resolveSession` would then throw on
     // on next sign-in attempt).
     await serviceClient.auth.admin.deleteUser(newUserId);
+    // Postgres unique-violation is 23505 — surface the
+    // `profiles_cadete_nro_active_unique` conflict (0021) with a message
+    // the dueño can act on, instead of the raw constraint-name error.
+    const isDuplicateNro = profileInsertError.code === '23505';
     return jsonResponse(
-      { error: `No se pudo crear el perfil del cadete: ${profileInsertError.message}` },
-      500,
+      {
+        error: isDuplicateNro
+          ? 'Ya hay un cadete activo con ese número.'
+          : `No se pudo crear el perfil del cadete: ${profileInsertError.message}`,
+      },
+      isDuplicateNro ? 409 : 500,
     );
   }
 

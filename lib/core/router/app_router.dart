@@ -6,6 +6,7 @@ import '../../features/auth/domain/app_session.dart';
 import '../../features/auth/presentation/providers.dart';
 import '../../features/auth/presentation/screens/create_cadete_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/manage_cadetes_screen.dart';
 import '../../features/delivery/presentation/screens/cadete_home_screen.dart';
 import '../../features/delivery/presentation/screens/navigation_map_screen.dart';
 import '../../features/orders/domain/order.dart';
@@ -131,6 +132,12 @@ final Provider<GoRouter> goRouterProvider = Provider<GoRouter>((ref) {
             // top-level `redirect` above already blocks a cadete session
             // from reaching this path.
             builder: (context, state) => const CreateCadeteScreen(),
+          ),
+          GoRoute(
+            path: 'cadetes',
+            name: 'cadetes-manage',
+            // Dueño-only, same guard as `cadetes/new` above.
+            builder: (context, state) => const ManageCadetesScreen(),
           ),
           GoRoute(
             path: ':id',
