@@ -70,6 +70,7 @@ dev_dependencies:
   # top level. Pinned to match flutter_riverpod's transitive riverpod version.
   riverpod: 3.0.0
   flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -115,3 +116,10 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "android/app/src/assets/icon/icon-f.png"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/splash_logo.png
+  android_12:
+    color: "#FFFFFF"
+    image: assets/images/splash_logo.png
