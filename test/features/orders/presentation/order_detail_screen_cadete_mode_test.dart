@@ -126,6 +126,34 @@ void main() {
   );
 
   testWidgets(
+    'an entregado order hides Editar/Corregir ubicación/Indicar problema/Cancelar pedido — the '
+    'delivery already happened, none of them make sense anymore regardless of payment status',
+    (tester) async {
+      final repository = FakeOrdersRepository(
+        seed: [buildTestOrder(id: 'order-1', status: OrderStatus.entregado)],
+      );
+      addTearDown(repository.dispose);
+
+      await pumpApp(
+        tester,
+        const MaterialApp(home: OrderDetailScreen(orderId: 'order-1')),
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar'), findsNothing);
+      expect(find.text('Corregir ubicación'), findsNothing);
+      expect(find.text('Indicar problema'), findsNothing);
+      expect(find.text('Marcar entrega'), findsNothing);
+      expect(find.text('Cancelar pedido'), findsNothing);
+      // Still there — Eliminar is a dueño-only action unaffected by the
+      // delivery lifecycle, and "Eliminar" itself is a valid entregado
+      // action (soft-deleting a bad record).
+      expect(find.text('Eliminar'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'readOnlyForCadete shows "Iniciar navegación" only while asignado',
     (tester) async {
       final repository = FakeOrdersRepository(

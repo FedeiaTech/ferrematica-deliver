@@ -108,6 +108,7 @@ final class Order {
     this.retriedFromOrderId,
     this.incobrableAt,
     this.incobrableReason,
+    this.incobrableResolvedAt,
   }) : assert(
          deliveryAddress.trim().isNotEmpty,
          'deliveryAddress must not be empty',
@@ -200,15 +201,30 @@ final class Order {
   /// off an entregado order's outstanding debt as uncollectible — either
   /// the remainder of a partial collection (`pendingBalance` stays set, as
   /// a historical record of what was forgiven) or a delivery that never
-  /// collected anything at all. Final: there is no "undo" action, matching
-  /// this codebase's other one-way claims (`venta_order_links`,
-  /// `deliveryProblem`). `null` for every order that hasn't been written
-  /// off.
+  /// collected anything at all. Never cleared once set, even if later
+  /// resolved (see [incobrableResolvedAt]) — this stays as the permanent
+  /// record that the debt WAS written off at some point. `null` for every
+  /// order that has never been written off.
   final DateTime? incobrableAt;
 
   /// Optional free-text note captured alongside [incobrableAt] — why the
   /// debt was written off. Never required, never cleared once set.
   final String? incobrableReason;
+
+  /// Set once, by `OrdersController.collectPayment`, when a debt that was
+  /// previously written off ([incobrableAt] non-null) turns out to get
+  /// collected after all — "Cobrar" reuses the exact same partial/total
+  /// collection mechanics as an ordinary follow-up payment
+  /// ([paymentStatus] goes back to `cobrado`, [pendingBalance] reflects
+  /// what's still owed, if anything); this field is purely an audit marker
+  /// on top of that ("this order WAS incobrable from [incobrableAt] until
+  /// this date") — it doesn't gate or change any other behavior, including
+  /// `delivery_stats_screen.dart`'s totals, which already read
+  /// `pendingBalance`/`paymentStatus` live rather than a point-in-time
+  /// snapshot (the exact same mechanism an ordinary partial-payment
+  /// follow-up already relies on). `null` for an order that was never
+  /// incobrable, or still is.
+  final DateTime? incobrableResolvedAt;
 
   /// True when [latitude]/[longitude] are both present AND finite,
   /// in-range geographic values — rejects the NaN/Infinity/out-of-range
@@ -229,6 +245,17 @@ final class Order {
       latitude! <= 90 &&
       longitude! >= -180 &&
       longitude! <= 180;
+
+  /// Amount still owed on this order, regardless of *why* — never
+  /// collected at all, partially collected, or written off as incobrable
+  /// — `null` when nothing is owed. [pendingBalance], when set, is always
+  /// the exact remainder (a partial collection or a write-off both leave
+  /// it in place); otherwise, an order that was never marked `cobrado`
+  /// owes its full [amountToCharge]. Shared by `order_card.dart` (shows
+  /// this next to the dashboard's crossed-dollar icon) and
+  /// `order_detail_screen.dart` (the "Cobrar" quick action).
+  double? get montoAdeudado =>
+      pendingBalance ?? (paymentStatus != PaymentStatus.cobrado ? amountToCharge : null);
 
   /// True when the dueño hasn't finished filling in payment details yet.
   bool get isIncomplete =>
@@ -301,6 +328,7 @@ final class Order {
     bool clearEnvioPendingBalance = false,
     DateTime? incobrableAt,
     String? incobrableReason,
+    DateTime? incobrableResolvedAt,
   }) {
     return Order(
       id: id,
@@ -340,6 +368,7 @@ final class Order {
       retriedFromOrderId: retriedFromOrderId,
       incobrableAt: incobrableAt ?? this.incobrableAt,
       incobrableReason: incobrableReason ?? this.incobrableReason,
+      incobrableResolvedAt: incobrableResolvedAt ?? this.incobrableResolvedAt,
     );
   }
 }

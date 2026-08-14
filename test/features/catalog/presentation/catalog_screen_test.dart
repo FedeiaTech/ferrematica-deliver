@@ -80,7 +80,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('No hay productos en esta categoría.'), findsOneWidget);
+      expect(find.text('No hay productos que coincidan con el filtro.'), findsOneWidget);
       expect(find.text('Ver todos'), findsOneWidget);
     },
   );

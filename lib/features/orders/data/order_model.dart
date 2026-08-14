@@ -42,6 +42,7 @@ class OrderModel {
     this.retriedFromOrderId,
     this.incobrableAt,
     this.incobrableReason,
+    this.incobrableResolvedAt,
   });
 
   Id get isarId => fastHash(id);
@@ -107,6 +108,10 @@ class OrderModel {
 
   /// Mirrors [Order.incobrableReason]. Purely additive nullable property.
   final String? incobrableReason;
+
+  /// Mirrors [Order.incobrableResolvedAt]. Purely additive nullable
+  /// property.
+  final DateTime? incobrableResolvedAt;
 }
 
 /// Embedded line item — part of the [OrderModel] row itself, not a separate
@@ -159,6 +164,7 @@ OrderModel orderToModel(Order order) {
     retriedFromOrderId: order.retriedFromOrderId,
     incobrableAt: order.incobrableAt,
     incobrableReason: order.incobrableReason,
+    incobrableResolvedAt: order.incobrableResolvedAt,
   );
 }
 
@@ -200,6 +206,7 @@ Order orderModelToDomain(OrderModel model) {
     retriedFromOrderId: model.retriedFromOrderId,
     incobrableAt: model.incobrableAt,
     incobrableReason: model.incobrableReason,
+    incobrableResolvedAt: model.incobrableResolvedAt,
   );
 }
 

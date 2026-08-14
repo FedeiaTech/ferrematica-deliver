@@ -94,6 +94,7 @@ class SupabaseOrdersRemote implements OrdersRemote {
     'retried_from_order_id': order.retriedFromOrderId,
     'incobrable_at': order.incobrableAt?.toUtc().toIso8601String(),
     'incobrable_reason': order.incobrableReason,
+    'incobrable_resolved_at': order.incobrableResolvedAt?.toUtc().toIso8601String(),
   };
 
   /// Maps an `orders` row back to the domain [Order]. See [toRow].
@@ -139,6 +140,9 @@ class SupabaseOrdersRemote implements OrdersRemote {
         ? null
         : DateTime.parse(row['incobrable_at'] as String),
     incobrableReason: row['incobrable_reason'] as String?,
+    incobrableResolvedAt: row['incobrable_resolved_at'] == null
+        ? null
+        : DateTime.parse(row['incobrable_resolved_at'] as String),
   );
 
   /// Explicit `status` ↔ row mapper — mirrors [_paymentMethodToRow]/

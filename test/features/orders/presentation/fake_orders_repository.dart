@@ -17,6 +17,8 @@ Order buildTestOrder({
   double? pendingBalance,
   double? valorEnvio,
   double? envioPendingBalance,
+  String? deliveryProblem,
+  DateTime? incobrableAt,
 }) {
   final at = updatedAt ?? DateTime(2026, 1, 1);
   return Order(
@@ -34,6 +36,8 @@ Order buildTestOrder({
     pendingBalance: pendingBalance,
     valorEnvio: valorEnvio,
     envioPendingBalance: envioPendingBalance,
+    deliveryProblem: deliveryProblem,
+    incobrableAt: incobrableAt,
   );
 }
 

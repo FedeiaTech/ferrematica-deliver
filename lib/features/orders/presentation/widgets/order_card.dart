@@ -7,7 +7,7 @@ import '../../../auth/presentation/providers.dart' show cadeteListProvider;
 import '../../../delivery/presentation/providers.dart'
     show currentDeviceLocationProvider;
 import '../../domain/order.dart';
-import '../providers.dart' show isOrderUnassigned;
+import '../providers.dart' show isOrderUnassigned, kMotivoVentaAnulada;
 import 'incomplete_badge.dart';
 import 'sync_status_chip.dart';
 
@@ -86,26 +86,56 @@ class OrderCard extends ConsumerWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: order.amountToCharge != null || order.needsPaymentFollowUp
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (order.amountToCharge != null)
-                      Text(
-                        '\$${order.amountToCharge!.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    if (order.needsPaymentFollowUp)
-                      Tooltip(
-                        message: 'Cobro pendiente',
-                        child: Icon(
-                          Icons.money_off_outlined,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.error,
+          // `needsPaymentFollowUp` alone excludes `incobrable` by design
+          // (it's meant for the payment-pending banner, which shouldn't
+          // keep nagging about a debt the dueño already wrote off) — but
+          // the dashboard indicator is different: an incobrable order
+          // should still show its owed amount here, since "Cobrar" (the
+          // detail screen's resolve action) needs the dueño to actually
+          // notice it's there to collect against.
+          trailing:
+              order.amountToCharge != null ||
+                  order.needsPaymentFollowUp ||
+                  order.paymentStatus == PaymentStatus.incobrable
+              ? Padding(
+                  // Separates the trailing column (amount + crossed-dollar
+                  // indicator) from the card's own right edge — flush
+                  // against it read as cramped/cut off. Centered (not
+                  // right-aligned) within that offset column too.
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (order.amountToCharge != null)
+                        Text(
+                          '\$${order.amountToCharge!.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                      ),
-                  ],
+                      if (order.needsPaymentFollowUp ||
+                          order.paymentStatus == PaymentStatus.incobrable) ...[
+                        Tooltip(
+                          message: order.paymentStatus == PaymentStatus.incobrable
+                              ? 'Incobrable'
+                              : 'Cobro pendiente',
+                          child: Icon(
+                            Icons.money_off_outlined,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        if (order.montoAdeudado != null)
+                          Text(
+                            '\$${order.montoAdeudado!.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
                 )
               : null,
           subtitle: Column(
@@ -148,11 +178,30 @@ class OrderCard extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: 4),
-              Text(
-                statusLabel,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.w600,
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: statusLabel,
+                      style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+                    ),
+                    // Distinguishes an order auto-cancelled because its
+                    // linked venta was voided in the POS
+                    // (OrdersController.cancelDueToVentaAnulada) from an
+                    // ordinary cancellation — same red as the detail
+                    // screen's locked-out view, right in the dashboard so
+                    // the dueño doesn't have to open the order to tell them
+                    // apart.
+                    if (order.status == OrderStatus.cancelado &&
+                        order.deliveryProblem == kMotivoVentaAnulada)
+                      TextSpan(
+                        text: ' - Anulada',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 4),

@@ -276,6 +276,133 @@ void main() {
     });
   });
 
+  group('OrdersController.collectPayment', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('pago total on an ordinary pendiente follow-up clears the debt, no incobrable trace', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.pendiente,
+        amountToCharge: 100,
+      );
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).collectPayment(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.pendingBalance, isNull);
+      expect(saved.incobrableResolvedAt, isNull);
+    });
+
+    test('cobro parcial on a cobrado order lowers pendingBalance to the new remainder', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+        pendingBalance: 60,
+      );
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .collectPayment(order, newPendingBalance: 20);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.pendingBalance, 20);
+    });
+
+    test('late collection on an incobrable order resolves it and stamps incobrableResolvedAt', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.incobrable,
+        amountToCharge: 100,
+        pendingBalance: 60,
+        incobrableAt: DateTime(2026, 1, 5),
+      );
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).collectPayment(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.cobrado);
+      expect(saved.pendingBalance, isNull);
+      // Never cleared — the permanent record that it WAS written off once.
+      expect(saved.incobrableAt, DateTime(2026, 1, 5));
+      expect(saved.incobrableResolvedAt, isNotNull);
+    });
+
+    test('is a no-op when there is nothing owed', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.entregado,
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+      );
+      await repository.save(order);
+
+      await container.read(ordersControllerProvider.notifier).collectPayment(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.paymentStatus, PaymentStatus.cobrado);
+    });
+  });
+
+  group('OrdersController.cancelDueToVentaAnulada', () {
+    late FakeOrdersRepository repository;
+    late ProviderContainer container;
+
+    setUp(() {
+      repository = FakeOrdersRepository();
+      container = ProviderContainer(
+        overrides: [ordersRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(repository.dispose);
+    });
+
+    test('cancels with the kMotivoVentaAnulada sentinel as deliveryProblem', () async {
+      final order = buildTestOrder(status: OrderStatus.enCamino);
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .cancelDueToVentaAnulada(order);
+
+      final saved = await repository.getById(order.id);
+      expect(saved!.status, OrderStatus.cancelado);
+      expect(saved.deliveryProblem, kMotivoVentaAnulada);
+      expect(saved.syncStatus, SyncStatus.pending);
+    });
+
+    test('is a no-op when the order is already cancelado', () async {
+      final order = buildTestOrder(
+        status: OrderStatus.cancelado,
+        deliveryProblem: 'otro motivo',
+      );
+      await repository.save(order);
+
+      await container
+          .read(ordersControllerProvider.notifier)
+          .cancelDueToVentaAnulada(order);
+
+      final saved = await repository.getById(order.id);
+      // Unchanged — the sentinel never overwrites an unrelated cancellation
+      // reason that got there first.
+      expect(saved!.deliveryProblem, 'otro motivo');
+    });
+  });
+
   group('OrdersController.assignCadete', () {
     late FakeOrdersRepository repository;
     late ProviderContainer container;

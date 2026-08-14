@@ -83,70 +83,75 @@ const OrderModelSchema = CollectionSchema(
       name: r'incobrableReason',
       type: IsarType.string,
     ),
-    r'items': PropertySchema(
+    r'incobrableResolvedAt': PropertySchema(
       id: 14,
+      name: r'incobrableResolvedAt',
+      type: IsarType.dateTime,
+    ),
+    r'items': PropertySchema(
+      id: 15,
       name: r'items',
       type: IsarType.objectList,
 
       target: r'OrderItemModel',
     ),
     r'latitude': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'latitude',
       type: IsarType.double,
     ),
     r'longitude': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'longitude',
       type: IsarType.double,
     ),
-    r'notes': PropertySchema(id: 17, name: r'notes', type: IsarType.string),
+    r'notes': PropertySchema(id: 18, name: r'notes', type: IsarType.string),
     r'paymentMethod': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'paymentMethod',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentMethodEnumValueMap,
     ),
     r'paymentStatus': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'paymentStatus',
       type: IsarType.byte,
       enumMap: _OrderModelpaymentStatusEnumValueMap,
     ),
     r'pendingBalance': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'pendingBalance',
       type: IsarType.double,
     ),
     r'resolvedCity': PropertySchema(
-      id: 21,
+      id: 22,
       name: r'resolvedCity',
       type: IsarType.string,
     ),
     r'retriedFromOrderId': PropertySchema(
-      id: 22,
+      id: 23,
       name: r'retriedFromOrderId',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 23,
+      id: 24,
       name: r'status',
       type: IsarType.byte,
       enumMap: _OrderModelstatusEnumValueMap,
     ),
     r'syncStatus': PropertySchema(
-      id: 24,
+      id: 25,
       name: r'syncStatus',
       type: IsarType.byte,
       enumMap: _OrderModelsyncStatusEnumValueMap,
     ),
     r'updatedAt': PropertySchema(
-      id: 25,
+      id: 26,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'valorEnvio': PropertySchema(
-      id: 26,
+      id: 27,
       name: r'valorEnvio',
       type: IsarType.double,
     ),
@@ -312,24 +317,25 @@ void _orderModelSerialize(
   writer.writeString(offsets[11], object.id);
   writer.writeDateTime(offsets[12], object.incobrableAt);
   writer.writeString(offsets[13], object.incobrableReason);
+  writer.writeDateTime(offsets[14], object.incobrableResolvedAt);
   writer.writeObjectList<OrderItemModel>(
-    offsets[14],
+    offsets[15],
     allOffsets,
     OrderItemModelSchema.serialize,
     object.items,
   );
-  writer.writeDouble(offsets[15], object.latitude);
-  writer.writeDouble(offsets[16], object.longitude);
-  writer.writeString(offsets[17], object.notes);
-  writer.writeByte(offsets[18], object.paymentMethod.index);
-  writer.writeByte(offsets[19], object.paymentStatus.index);
-  writer.writeDouble(offsets[20], object.pendingBalance);
-  writer.writeString(offsets[21], object.resolvedCity);
-  writer.writeString(offsets[22], object.retriedFromOrderId);
-  writer.writeByte(offsets[23], object.status.index);
-  writer.writeByte(offsets[24], object.syncStatus.index);
-  writer.writeDateTime(offsets[25], object.updatedAt);
-  writer.writeDouble(offsets[26], object.valorEnvio);
+  writer.writeDouble(offsets[16], object.latitude);
+  writer.writeDouble(offsets[17], object.longitude);
+  writer.writeString(offsets[18], object.notes);
+  writer.writeByte(offsets[19], object.paymentMethod.index);
+  writer.writeByte(offsets[20], object.paymentStatus.index);
+  writer.writeDouble(offsets[21], object.pendingBalance);
+  writer.writeString(offsets[22], object.resolvedCity);
+  writer.writeString(offsets[23], object.retriedFromOrderId);
+  writer.writeByte(offsets[24], object.status.index);
+  writer.writeByte(offsets[25], object.syncStatus.index);
+  writer.writeDateTime(offsets[26], object.updatedAt);
+  writer.writeDouble(offsets[27], object.valorEnvio);
 }
 
 OrderModel _orderModelDeserialize(
@@ -353,38 +359,39 @@ OrderModel _orderModelDeserialize(
     id: reader.readString(offsets[11]),
     incobrableAt: reader.readDateTimeOrNull(offsets[12]),
     incobrableReason: reader.readStringOrNull(offsets[13]),
+    incobrableResolvedAt: reader.readDateTimeOrNull(offsets[14]),
     items:
         reader.readObjectList<OrderItemModel>(
-          offsets[14],
+          offsets[15],
           OrderItemModelSchema.deserialize,
           allOffsets,
           OrderItemModel(),
         ) ??
         const <OrderItemModel>[],
-    latitude: reader.readDoubleOrNull(offsets[15]),
-    longitude: reader.readDoubleOrNull(offsets[16]),
-    notes: reader.readStringOrNull(offsets[17]),
+    latitude: reader.readDoubleOrNull(offsets[16]),
+    longitude: reader.readDoubleOrNull(offsets[17]),
+    notes: reader.readStringOrNull(offsets[18]),
     paymentMethod:
         _OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
-          offsets[18],
+          offsets[19],
         )] ??
         PaymentMethod.sinDefinir,
     paymentStatus:
         _OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
-          offsets[19],
+          offsets[20],
         )] ??
         PaymentStatus.pendiente,
-    pendingBalance: reader.readDoubleOrNull(offsets[20]),
-    resolvedCity: reader.readStringOrNull(offsets[21]),
-    retriedFromOrderId: reader.readStringOrNull(offsets[22]),
+    pendingBalance: reader.readDoubleOrNull(offsets[21]),
+    resolvedCity: reader.readStringOrNull(offsets[22]),
+    retriedFromOrderId: reader.readStringOrNull(offsets[23]),
     status:
-        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[23])] ??
+        _OrderModelstatusValueEnumMap[reader.readByteOrNull(offsets[24])] ??
         OrderStatus.pendiente,
     syncStatus:
-        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[24])] ??
+        _OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(offsets[25])] ??
         SyncStatus.pending,
-    updatedAt: reader.readDateTime(offsets[25]),
-    valorEnvio: reader.readDoubleOrNull(offsets[26]),
+    updatedAt: reader.readDateTime(offsets[26]),
+    valorEnvio: reader.readDoubleOrNull(offsets[27]),
   );
   return object;
 }
@@ -425,6 +432,8 @@ P _orderModelDeserializeProp<P>(
     case 13:
       return (reader.readStringOrNull(offset)) as P;
     case 14:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 15:
       return (reader.readObjectList<OrderItemModel>(
                 offset,
                 OrderItemModelSchema.deserialize,
@@ -433,43 +442,43 @@ P _orderModelDeserializeProp<P>(
               ) ??
               const <OrderItemModel>[])
           as P;
-    case 15:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 16:
       return (reader.readDoubleOrNull(offset)) as P;
     case 17:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 18:
+      return (reader.readStringOrNull(offset)) as P;
+    case 19:
       return (_OrderModelpaymentMethodValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentMethod.sinDefinir)
           as P;
-    case 19:
+    case 20:
       return (_OrderModelpaymentStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               PaymentStatus.pendiente)
           as P;
-    case 20:
-      return (reader.readDoubleOrNull(offset)) as P;
     case 21:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDoubleOrNull(offset)) as P;
     case 22:
       return (reader.readStringOrNull(offset)) as P;
     case 23:
+      return (reader.readStringOrNull(offset)) as P;
+    case 24:
       return (_OrderModelstatusValueEnumMap[reader.readByteOrNull(offset)] ??
               OrderStatus.pendiente)
           as P;
-    case 24:
+    case 25:
       return (_OrderModelsyncStatusValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               SyncStatus.pending)
           as P;
-    case 25:
-      return (reader.readDateTime(offset)) as P;
     case 26:
+      return (reader.readDateTime(offset)) as P;
+    case 27:
       return (reader.readDoubleOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2760,6 +2769,82 @@ extension OrderModelQueryFilter
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'incobrableResolvedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'incobrableResolvedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtEqualTo(DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'incobrableResolvedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtGreaterThan(DateTime? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'incobrableResolvedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtLessThan(DateTime? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'incobrableResolvedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition>
+  incobrableResolvedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'incobrableResolvedAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterFilterCondition> isarIdEqualTo(
     Id value,
   ) {
@@ -4197,6 +4282,20 @@ extension OrderModelQuerySortBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByIncobrableResolvedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableResolvedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  sortByIncobrableResolvedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableResolvedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> sortByLatitude() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'latitude', Sort.asc);
@@ -4522,6 +4621,20 @@ extension OrderModelQuerySortThenBy
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByIncobrableResolvedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableResolvedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<OrderModel, OrderModel, QAfterSortBy>
+  thenByIncobrableResolvedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'incobrableResolvedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QAfterSortBy> thenByIsarId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isarId', Sort.asc);
@@ -4797,6 +4910,13 @@ extension OrderModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<OrderModel, OrderModel, QDistinct>
+  distinctByIncobrableResolvedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'incobrableResolvedAt');
+    });
+  }
+
   QueryBuilder<OrderModel, OrderModel, QDistinct> distinctByLatitude() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'latitude');
@@ -4972,6 +5092,13 @@ extension OrderModelQueryProperty
   incobrableReasonProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'incobrableReason');
+    });
+  }
+
+  QueryBuilder<OrderModel, DateTime?, QQueryOperations>
+  incobrableResolvedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'incobrableResolvedAt');
     });
   }
 

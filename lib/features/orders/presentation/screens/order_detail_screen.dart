@@ -9,7 +9,7 @@ import '../../../auth/presentation/providers.dart'
 import '../../../delivery/presentation/providers.dart'
     show NavigationRouteData, NavigationTarget, navigationRouteProvider;
 import '../../data/providers.dart'
-    show linkedVentasProvider, ventasRemoteProvider;
+    show linkedVentasLiveProvider, ventasRemoteProvider;
 import '../../data/venta_disponible.dart' show VentaDetalleDisponible;
 import '../../data/ventas_remote.dart' show LinkedVenta;
 import '../../domain/order.dart';
@@ -90,12 +90,22 @@ class _OrderDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canDeliver = OrdersController.isValidTransition(
-      order.status,
-      OrderStatus.entregado,
-    );
+    // `isValidTransition`'s own `from == to` early-return (true for any
+    // status transitioning to itself, a different concern than this check)
+    // would otherwise leave `canDeliver` true for an order that's ALREADY
+    // entregado — silently re-offering "Marcar entrega" (harmless no-op at
+    // worst) alongside "Indicar problema", which is NOT harmless: it
+    // cancels the order, reverting a delivery that already, physically,
+    // happened. The explicit `!= entregado` guard is the fix.
+    final canDeliver =
+        order.status != OrderStatus.entregado &&
+        OrdersController.isValidTransition(order.status, OrderStatus.entregado);
+    // Once entregado, "Cancelar pedido" makes no more sense than
+    // "Indicar problema" above does, for the same reason — same guard.
     final canCancel =
-        !readOnlyForCadete && order.status != OrderStatus.cancelado;
+        !readOnlyForCadete &&
+        order.status != OrderStatus.cancelado &&
+        order.status != OrderStatus.entregado;
     // Spec's order-assignment requirement: assignable only while
     // pendiente/asignado — once en_camino or later, reassignment is
     // rejected (matches OrdersController.assignCadete's own guard).
@@ -121,32 +131,75 @@ class _OrderDetailBody extends ConsumerWidget {
     final canViewRoute =
         canNavigateToMap && order.status == OrderStatus.enCamino;
     final navigateBasePath = readOnlyForCadete ? '/delivery' : '/orders';
-    // Dueño-only, same as Editar/Cancelar/Eliminar — retrying is an
-    // order-management action, not something the cadete who reported the
-    // problem decides on their own.
-    final canRetry =
-        !readOnlyForCadete &&
-        order.status == OrderStatus.cancelado &&
-        order.deliveryProblem != null;
     final statusColor = orderStatusColor(order.status);
     // Design decision D8: a venta_order_links row is never broken once
     // written, so a linked venta that later gets anulada in the POS must be
     // surfaced here instead of silently staying invisible to the dueño —
     // checked across every linked venta, since a pedido can bundle more
-    // than one. Cadete mode skips the check — it's dueño-facing
-    // information, and avoids an extra Supabase round trip on a screen the
-    // cadete may open offline mid-delivery.
-    final linkedVentas = readOnlyForCadete
-        ? const <LinkedVenta>[]
-        : ref
-              .watch(linkedVentasProvider(order.id))
-              .maybeWhen(
-                data: (ventas) => ventas,
-                orElse: () => const <LinkedVenta>[],
-              );
+    // than one. Polled (not one-shot) and watched in BOTH modes now — the
+    // cadete is exactly who needs to be blocked from "Marcar entrega" once
+    // the one linked venta is voided, and per the dueño's explicit request
+    // this needs to resolve "de forma inmediata" even if the cadete never
+    // leaves the navigation screen for the whole trip. A failed poll
+    // degrades to the last known value (see linkedVentasLiveProvider) so an
+    // offline cadete is never blocked by a check that can't complete.
+    final linkedVentasAsync = ref.watch(linkedVentasLiveProvider(order.id));
+    final linkedVentas = linkedVentasAsync.maybeWhen(
+      data: (ventas) => ventas,
+      orElse: () => const <LinkedVenta>[],
+    );
     final linkedVentaAnulada = linkedVentas.any(
       (venta) => venta.estado == 'anulada',
     );
+    // Dueño-only, same as Editar/Cancelar/Eliminar — retrying is an
+    // order-management action, not something the cadete who reported the
+    // problem decides on their own. `!linkedVentaAnulada` covers every
+    // shape of "this order has a voided venta", not just the single-venta
+    // auto-cancel case (_VentaAnuladaLockedView, which never reaches this
+    // button at all): a normal cancellation whose venta was — or later
+    // became — anulada must ALSO refuse retry, since
+    // order_form_screen.dart's retry blindly carries every sourceVentaId
+    // item forward and re-claims it on submit without checking whether
+    // that venta is still `completada`.
+    final canRetry =
+        !readOnlyForCadete &&
+        order.status == OrderStatus.cancelado &&
+        order.deliveryProblem != null &&
+        !linkedVentaAnulada;
+    // Exactly one linked venta AND it's void: nothing left to deliver.
+    // Auto-cancels below (design: block Marcar entrega/Indicar problema/
+    // Cancelar pedido alike, not just warn) — two-or-more ventas with only
+    // one voided still has real merchandise to deliver, so that case stays
+    // a per-line notice instead (_LinkedVentaTile) and never auto-cancels.
+    // Also never fires once entregado — the delivery already happened,
+    // there is no "un-delivering" it back to cancelado.
+    //
+    // `ref.listen` (not a plain check + call inline) is the supported way
+    // to trigger this kind of imperative side effect from a provider
+    // change inside a ConsumerWidget's build — it fires after the frame,
+    // never synchronously mid-build. `cancelDueToVentaAnulada` itself
+    // no-ops once the order is already cancelado, so a duplicate fire from
+    // a later poll tick (or another mounted screen watching the same
+    // provider) is harmless.
+    ref.listen<AsyncValue<List<LinkedVenta>>>(linkedVentasLiveProvider(order.id), (
+      previous,
+      next,
+    ) {
+      final ventas = next.value;
+      if (ventas == null ||
+          order.status == OrderStatus.cancelado ||
+          order.status == OrderStatus.entregado) {
+        return;
+      }
+      final soloVentaAnulada =
+          ventas.length == 1 && ventas.single.estado == 'anulada';
+      if (soloVentaAnulada) {
+        ref.read(ordersControllerProvider.notifier).cancelDueToVentaAnulada(order);
+      }
+    });
+    if (order.status == OrderStatus.cancelado && order.deliveryProblem == kMotivoVentaAnulada) {
+      return _VentaAnuladaLockedView(order: order, readOnlyForCadete: readOnlyForCadete);
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -263,6 +316,12 @@ class _OrderDetailBody extends ConsumerWidget {
           _PricingSummary(
             subtotal: order.amountToCharge!,
             valorEnvio: order.valorEnvio,
+            // Only relevant for the still-deliverable multi-venta case —
+            // the single-venta-anulada case never reaches this far down
+            // the tree (see the _VentaAnuladaLockedView early return above).
+            descuentoFacturaAnulada: linkedVentas
+                .where((venta) => venta.estado == 'anulada')
+                .fold<double>(0, (sum, venta) => sum + venta.total),
           ),
         _DetailRow(
           label: 'Pago',
@@ -303,6 +362,32 @@ class _OrderDetailBody extends ConsumerWidget {
               TextSpan(
                 text: '; cadetería pendiente \$${order.envioPendingBalance!.toStringAsFixed(2)}',
               ),
+            // "Cobrar" sits right next to the debt it resolves — same
+            // request as the dashboard's crossed-dollar indicator: the
+            // action lives where the amount owed is already visible,
+            // instead of a separate button further down the screen.
+            // `!linkedVentaAnulada`: same reasoning as "Marcar incobrable"
+            // above — if the sale was voided there's no real debt left to
+            // collect against.
+            if (!readOnlyForCadete &&
+                order.status == OrderStatus.entregado &&
+                order.montoAdeudado != null &&
+                !linkedVentaAnulada)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: IconButton(
+                  onPressed: () => _openCollectPaymentDialog(context, ref, order),
+                  icon: Icon(
+                    Icons.paid_outlined,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  tooltip: 'Cobrar',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
           ],
         ),
         if (order.paymentStatus == PaymentStatus.incobrable &&
@@ -335,8 +420,16 @@ class _OrderDetailBody extends ConsumerWidget {
         // is `canRetry`'s "Reintentar entrega" below, which opens a brand
         // new order pre-filled from this one. Editing or nudging the pin
         // on the cancelled record itself would suggest it can be revived
-        // in place, which it can't.
-        if (!readOnlyForCadete && order.status != OrderStatus.cancelado) ...[
+        // in place, which it can't. Same reasoning for entregado, but for
+        // the opposite reason — not a dead end, a *finished* one: the
+        // delivery already, physically, happened, at whatever address/pin
+        // was on file when it did. Unlike enCamino (which still allows
+        // "Corregir ubicación" below), entregado hides BOTH — there's no
+        // ongoing navigation left for a corrected pin to help with, paid
+        // in full or not.
+        if (!readOnlyForCadete &&
+            order.status != OrderStatus.cancelado &&
+            order.status != OrderStatus.entregado) ...[
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -416,7 +509,11 @@ class _OrderDetailBody extends ConsumerWidget {
                 icon: const Icon(Icons.replay_outlined),
                 label: const Text('Reintentar entrega'),
               ),
-            if (!readOnlyForCadete && order.needsPaymentFollowUp)
+            // `!linkedVentaAnulada`: if the underlying sale was voided,
+            // there's no real debt left to write off — the goods (and per
+            // the POS's own "Anular" flow, the stock) already went back,
+            // so "incobrable" would misrepresent a return as a bad debt.
+            if (!readOnlyForCadete && order.needsPaymentFollowUp && !linkedVentaAnulada)
               OutlinedButton.icon(
                 onPressed: () => _openMarkIncobrableDialog(context, ref, order),
                 icon: Icon(
@@ -670,6 +767,102 @@ class _OrderDetailBody extends ConsumerWidget {
         .read(ordersControllerProvider.notifier)
         .updateOrder(
           text.isEmpty ? order.copyWith(clearNotes: true) : order.copyWith(notes: text),
+        );
+  }
+
+  /// "Cobrar" — registers a payment against [order]'s [Order.montoAdeudado]
+  /// via [OrdersController.collectPayment], covering both an ordinary
+  /// pendiente/parcial follow-up AND a late collection on a previously
+  /// `incobrable` order with the same two-choice flow: "Pago total"
+  /// (clears the debt outright) or "Cobro parcial" (a partial amount,
+  /// validated with the same rules as `markDelivered`'s own partial-
+  /// payment step — [_parseRoundedAmount]/[_partialAmountRefusal]).
+  Future<void> _openCollectPaymentDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final total = order.montoAdeudado;
+    if (total == null) return;
+    final amountController = TextEditingController();
+    var showPartialField = false;
+    double? confirmedNewBalance;
+    var confirmedFull = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          final refusal = showPartialField
+              ? _partialAmountRefusal(amountController.text, total)
+              : null;
+          return AlertDialog(
+            title: const Text('Cobrar'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Se adeudan \$${total.toStringAsFixed(2)}.'),
+                if (showPartialField) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Monto cobrado ahora',
+                      errorText: amountController.text.isEmpty ? null : refusal,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ],
+            ),
+            actions: showPartialField
+                ? [
+                    TextButton(
+                      onPressed: () => setState(() => showPartialField = false),
+                      child: const Text('Atrás'),
+                    ),
+                    FilledButton(
+                      onPressed: refusal != null
+                          ? null
+                          : () {
+                              confirmedNewBalance =
+                                  total - _parseRoundedAmount(amountController.text)!;
+                              Navigator.of(dialogContext).pop();
+                            },
+                      child: const Text('Confirmar'),
+                    ),
+                  ]
+                : [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Cancelar'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => setState(() => showPartialField = true),
+                      child: const Text('Cobro parcial'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        confirmedFull = true;
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: const Text('Pago total'),
+                    ),
+                  ],
+          );
+        },
+      ),
+    );
+    if (!confirmedFull && confirmedNewBalance == null) return;
+    if (!context.mounted) return;
+    await ref
+        .read(ordersControllerProvider.notifier)
+        .collectPayment(
+          order,
+          newPendingBalance: confirmedFull ? null : confirmedNewBalance,
         );
   }
 
@@ -1103,8 +1296,23 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
     final anulada = venta.estado == 'anulada';
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      color: anulada ? Theme.of(context).colorScheme.errorContainer : null,
       child: ExpansionTile(
         title: Text('Factura Nº ${venta.ventaLocalId}'),
+        // Bundled-order case (2+ ventas, only this one anulada): the
+        // delivery keeps going for the rest, so this stays a per-line
+        // notice, not a full block — same wording as the single-venta
+        // auto-cancel case (kMotivoVentaAnulada), scoped to just this
+        // invoice's merchandise instead of the whole pedido.
+        subtitle: anulada
+            ? Text(
+                kMotivoVentaAnulada,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+            : null,
         leading: anulada
             ? Icon(
                 Icons.warning_amber_rounded,
@@ -1191,6 +1399,128 @@ class _LinkedVentaTileState extends ConsumerState<_LinkedVentaTile> {
     final local = fecha.toLocal();
     String two(int value) => value.toString().padLeft(2, '0');
     return '${two(local.hour)}:${two(local.minute)}';
+  }
+}
+
+/// Locked-out replacement for the normal cancelado view, shown only when
+/// [Order.deliveryProblem] is the [kMotivoVentaAnulada] sentinel — the
+/// pedido's one linked venta was voided in the POS, auto-cancelling it
+/// (`OrdersController.cancelDueToVentaAnulada`). Every normal action
+/// (Marcar entrega, Indicar problema, Cancelar pedido) is gone — there's
+/// nothing left to deliver — replaced by a single red instruction and a
+/// gray, non-interactive placeholder where the live map used to be (no
+/// `FlutterMap` at all here, so there's no route/destination left to draw
+/// and no way to tap back into navigation).
+///
+/// Deliberately does NOT offer "Reintentar entrega" (unlike the ordinary
+/// cancelado view) — that flow carries the source order's items straight
+/// through, `sourceVentaId` included, and re-claims them blind on submit
+/// (`order_form_screen.dart`'s retry init + `OrdersController.createOrder`'s
+/// `fromVentaIds`) — `claimVenta` only checks whether the claim is
+/// currently ACTIVE, never whether the venta itself is still `completada`.
+/// Since this auto-cancel just released that exact claim, a "retry" here
+/// would silently re-link the new pedido to the SAME voided sale. The only
+/// path forward is "Eliminar" this record and create a genuinely new
+/// pedido (the "+" button) once the merchandise situation is sorted and a
+/// real venta exists to back it.
+class _VentaAnuladaLockedView extends ConsumerWidget {
+  const _VentaAnuladaLockedView({
+    required this.order,
+    required this.readOnlyForCadete,
+  });
+
+  final Order order;
+  final bool readOnlyForCadete;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SizedBox(height: 12),
+        Text(order.deliveryAddress, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.block, color: Theme.of(context).colorScheme.error),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  kMotivoVentaAnulada,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (order.latitude != null && order.longitude != null) ...[
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              height: 140,
+              width: double.infinity,
+              color: Colors.grey.shade400,
+              alignment: Alignment.center,
+              child: Icon(Icons.map_outlined, color: Colors.grey.shade700, size: 36),
+            ),
+          ),
+        ],
+        if (!readOnlyForCadete) ...[
+          const SizedBox(height: 24),
+          TextButton.icon(
+            onPressed: () => _confirmDeleteVentaAnulada(context, ref, order),
+            icon: Icon(
+              Icons.delete_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            label: Text(
+              'Eliminar',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _confirmDeleteVentaAnulada(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar pedido'),
+        content: const Text('¿Seguro que querés eliminar este pedido?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sí, eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) {
+      await ref.read(ordersControllerProvider.notifier).deleteOrder(order.id);
+      if (context.mounted && context.canPop()) context.pop();
+    }
   }
 }
 
@@ -1638,15 +1968,28 @@ String _formatFechaHora(DateTime fecha) {
 /// persisted as a computed field (design: "el valor total no es necesario
 /// registrarlo en la factura"). [subtotal] is [Order.amountToCharge];
 /// [valorEnvio] is added on top when non-null, shown as "-" otherwise.
+///
+/// [descuentoFacturaAnulada] is display-only too — [subtotal] itself is
+/// never mutated (it's the dueño's own charge figure, tied to
+/// pendingBalance's invariants elsewhere), so a still-bundled order with
+/// one voided venta among several shows the original subtotal, an explicit
+/// "Factura anulada" deduction line, and a Total that nets the two —
+/// letting the dueño see at a glance what actually still needs collecting
+/// without silently rewriting the stored amount.
 class _PricingSummary extends StatelessWidget {
-  const _PricingSummary({required this.subtotal, required this.valorEnvio});
+  const _PricingSummary({
+    required this.subtotal,
+    required this.valorEnvio,
+    this.descuentoFacturaAnulada = 0,
+  });
 
   final double subtotal;
   final double? valorEnvio;
+  final double descuentoFacturaAnulada;
 
   @override
   Widget build(BuildContext context) {
-    final total = subtotal + (valorEnvio ?? 0);
+    final total = subtotal - descuentoFacturaAnulada + (valorEnvio ?? 0);
     const boldStyle = TextStyle(fontWeight: FontWeight.bold);
     // Total is bold too (like Subtotal) but needs to stand out as the
     // headline figure, not just match Subtotal's weight — larger and in
@@ -1669,6 +2012,25 @@ class _PricingSummary extends StatelessWidget {
               Text('\$${subtotal.toStringAsFixed(2)}', style: boldStyle),
             ],
           ),
+          if (descuentoFacturaAnulada > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: Text(
+                      'Factura anulada',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ),
+                  Text(
+                    '-\$${descuentoFacturaAnulada.toStringAsFixed(2)}',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Row(

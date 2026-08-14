@@ -66,6 +66,49 @@ void main() {
     });
   });
 
+  group('Order.montoAdeudado', () {
+    test('null when never charged anything', () {
+      final order = _buildOrder();
+      expect(order.montoAdeudado, isNull);
+    });
+
+    test('the full amountToCharge when pendiente (nothing collected yet)', () {
+      final order = _buildOrder(
+        paymentStatus: PaymentStatus.pendiente,
+        amountToCharge: 100,
+      );
+      expect(order.montoAdeudado, 100);
+    });
+
+    test('the pendingBalance remainder when cobrado with a partial collection', () {
+      final order = _buildOrder(
+        paymentStatus: PaymentStatus.cobrado,
+        amountToCharge: 100,
+        pendingBalance: 40,
+      );
+      expect(order.montoAdeudado, 40);
+    });
+
+    test('null when cobrado in full (no pendingBalance)', () {
+      final order = _buildOrder(paymentStatus: PaymentStatus.cobrado, amountToCharge: 100);
+      expect(order.montoAdeudado, isNull);
+    });
+
+    test('the pendingBalance when incobrable with a written-off remainder', () {
+      final order = _buildOrder(
+        paymentStatus: PaymentStatus.incobrable,
+        amountToCharge: 100,
+        pendingBalance: 40,
+      );
+      expect(order.montoAdeudado, 40);
+    });
+
+    test('the full amountToCharge when incobrable and nothing was ever collected', () {
+      final order = _buildOrder(paymentStatus: PaymentStatus.incobrable, amountToCharge: 100);
+      expect(order.montoAdeudado, 100);
+    });
+  });
+
   group('Order.hasValidCoordinates', () {
     test('false when latitude/longitude are both null', () {
       final order = _buildOrder();

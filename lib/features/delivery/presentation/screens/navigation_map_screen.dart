@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:latlong2/latlong.dart' as latlong;
 
 import '../../../orders/domain/order.dart';
-import '../../../orders/presentation/providers.dart' show orderByIdProvider;
+import '../../../orders/presentation/providers.dart' show kMotivoVentaAnulada, orderByIdProvider;
 import '../../data/providers.dart' show locationClientProvider;
 import '../../domain/directions_client.dart' show RouteResult;
 import '../../domain/location_client.dart' show DeviceLocation;
@@ -79,10 +79,65 @@ class NavigationMapScreen extends ConsumerWidget {
               ),
             );
           }
+          // The order's ONE linked venta was voided in the POS while this
+          // screen was open (`order_detail_screen.dart`'s polling check —
+          // `OrdersController.cancelDueToVentaAnulada`) — "cerrar la
+          // navegación" per the dueño's own words: no more live route/
+          // destination, no way back into a real map from here, and this
+          // check re-runs on every rebuild of this screen (order comes
+          // from `orderByIdProvider`, itself backed by the same reactive
+          // Isar watch the rest of the app uses), so it takes effect while
+          // the cadete is mid-trip, not just next time they open the app.
+          if (order.status == OrderStatus.cancelado &&
+              order.deliveryProblem == kMotivoVentaAnulada) {
+            return _NavigationLockedByVentaAnulada();
+          }
           return _NavigationMapBody(order: order, mapBuilder: mapBuilder);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('Error al cargar el pedido: $error')),
+      ),
+    );
+  }
+}
+
+/// Replaces the live map entirely once [NavigationMapScreen] detects the
+/// order was auto-cancelled because its one linked venta got voided in the
+/// POS — gray, no route, no destination, no way to reopen a real map from
+/// here (this screen is only ever reached via "Iniciar navegación"/"Ver
+/// ruta" on the detail screen, and those buttons are already gone for a
+/// cancelado order — see `order_detail_screen.dart`).
+class _NavigationLockedByVentaAnulada extends StatelessWidget {
+  const _NavigationLockedByVentaAnulada();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey.shade400,
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block, size: 48, color: Colors.grey.shade700),
+            const SizedBox(height: 16),
+            Text(
+              kMotivoVentaAnulada,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Volver'),
+            ),
+          ],
+        ),
       ),
     );
   }

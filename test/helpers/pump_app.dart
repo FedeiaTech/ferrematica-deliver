@@ -6,6 +6,8 @@ import 'package:ferrematica_express/features/auth/data/providers.dart';
 import 'package:ferrematica_express/features/auth/domain/app_session.dart';
 import 'package:ferrematica_express/features/auth/domain/auth_repository.dart';
 import 'package:ferrematica_express/features/auth/presentation/providers.dart';
+import 'package:ferrematica_express/features/orders/data/providers.dart'
+    show linkedVentasPollIntervalProvider;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +108,10 @@ Future<void> pumpApp(
       isarProvider.overrideWithValue(isar),
       supabaseProvider.overrideWithValue(MockSupabaseClient()),
       authRepositoryProvider.overrideWithValue(resolvedAuthRepository),
+      // Never poll in tests — see linkedVentasPollIntervalProvider's doc
+      // comment (real periodic Timers trip flutter_test's pending-timer
+      // check regardless of ref.onDispose cancelling them correctly).
+      linkedVentasPollIntervalProvider.overrideWithValue(null),
       ...overrides,
     ],
   );

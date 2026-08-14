@@ -10,6 +10,15 @@ import '../data/providers.dart';
 import '../domain/order.dart';
 import '../domain/orders_repository.dart';
 
+/// [Order.deliveryProblem] sentinel set by
+/// [OrdersController.cancelDueToVentaAnulada] — a well-known string, not
+/// just descriptive text, so `order_detail_screen.dart` and
+/// `navigation_map_screen.dart` can both tell "cancelled because its one
+/// linked venta was voided in the POS" apart from any other cancellation
+/// reason and render the locked-out "retornar mercadería" state instead of
+/// the normal cancelado view.
+const String kMotivoVentaAnulada = 'Anulada desde POS — retornar mercadería.';
+
 /// Forward-only lifecycle order used to reject backward status transitions.
 /// `cancelado` is reachable from any of these and is terminal (no further
 /// transitions once cancelled) — see spec's "Status lifecycle" requirement.
@@ -399,6 +408,29 @@ class OrdersController extends Notifier<AsyncValue<void>> {
     );
   }
 
+  /// System-triggered cancellation when a pedido's ONE linked venta gets
+  /// anulada in the POS — there is nothing left to deliver, so unlike a
+  /// dueño/cadete-initiated cancellation this fires automatically, without
+  /// anyone tapping a button, the moment `order_detail_screen.dart`'s
+  /// polling notices it (design: block Marcar entrega/Indicar problema/
+  /// Cancelar pedido all alike once this state is reached — the ONLY
+  /// resolution left is "Reintentar entrega" once the dueño sorts out the
+  /// merchandise). [deliveryProblem] is set to the well-known
+  /// [kMotivoVentaAnulada] sentinel, not a generic message, so the detail/
+  /// navigation screens can render the dedicated locked-out UI instead of
+  /// the ordinary cancelado view. A no-op if already cancelled — callers
+  /// re-check on every poll tick, this guards against double-firing.
+  Future<void> cancelDueToVentaAnulada(Order order) async {
+    if (order.status == OrderStatus.cancelado) return;
+    await _repository.save(
+      order.copyWith(
+        status: OrderStatus.cancelado,
+        deliveryProblem: kMotivoVentaAnulada,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
   /// Writes off an `entregado` order's outstanding debt as uncollectible —
   /// either the remainder of a partial collection or a delivery that never
   /// collected anything at all (see [Order.needsPaymentFollowUp], the same
@@ -407,9 +439,12 @@ class OrdersController extends Notifier<AsyncValue<void>> {
   /// record of what was forgiven, same as [Order.incobrableAt]'s doc
   /// comment) — only [Order.paymentStatus] changes, never [Order.status]:
   /// the delivery itself already happened, this is purely a collections
-  /// outcome. Final, no "undo" — a no-op if [order] isn't eligible
-  /// (already incobrable, or has nothing owed) rather than throwing, so a
-  /// stale UI state (e.g. a second tap racing the first) degrades safely.
+  /// outcome. Not un-doable directly (there's no "un-mark incobrable"
+  /// button) — but [collectPayment] reaches the same end state if the debt
+  /// turns out to get collected after all. A no-op if [order] isn't
+  /// eligible (already incobrable, or has nothing owed) rather than
+  /// throwing, so a stale UI state (e.g. a second tap racing the first)
+  /// degrades safely.
   Future<void> markIncobrable(Order order, {String? reason}) async {
     if (!order.needsPaymentFollowUp) return;
     await _repository.save(
@@ -417,6 +452,38 @@ class OrdersController extends Notifier<AsyncValue<void>> {
         paymentStatus: PaymentStatus.incobrable,
         incobrableAt: DateTime.now(),
         incobrableReason: reason,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+  }
+
+  /// Registers a payment against an `entregado` order's outstanding debt —
+  /// covers three shapes with the exact same write: an ordinary follow-up
+  /// on a `pendiente`/partially-`cobrado` order (no prior write-off), OR a
+  /// late collection on an order that was `incobrable`. All three just
+  /// become `paymentStatus: cobrado` with [newPendingBalance] reflecting
+  /// what (if anything) is still owed — deliberately the SAME mechanics as
+  /// `markDelivered`'s own partial/total collection, not a separate code
+  /// path, so `delivery_stats_screen.dart`'s totals (which already read
+  /// `pendingBalance` live rather than a point-in-time snapshot) pick this
+  /// up automatically, no matter how long after the original delivery it
+  /// happens.
+  ///
+  /// [incobrableResolvedAt] is set to now() ONLY when [order] was actually
+  /// `incobrable` — a pure audit marker layered on top (see its doc
+  /// comment on [Order]); an ordinary pendiente/partial follow-up that was
+  /// never written off doesn't touch it. A no-op if there's nothing owed.
+  Future<void> collectPayment(Order order, {double? newPendingBalance}) async {
+    if (!order.needsPaymentFollowUp && order.paymentStatus != PaymentStatus.incobrable) {
+      return;
+    }
+    final wasIncobrable = order.paymentStatus == PaymentStatus.incobrable;
+    await _repository.save(
+      order.copyWith(
+        paymentStatus: PaymentStatus.cobrado,
+        pendingBalance: newPendingBalance,
+        clearPendingBalance: newPendingBalance == null,
+        incobrableResolvedAt: wasIncobrable ? DateTime.now() : null,
         syncStatus: SyncStatus.pending,
       ),
     );
