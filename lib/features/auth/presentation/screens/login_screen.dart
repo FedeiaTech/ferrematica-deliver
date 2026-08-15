@@ -21,11 +21,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // Starts invisible and fades to opaque on the first post-frame callback,
+  // so this screen's appearance reads as a continuation of the native
+  // splash's crossfade (see main.dart's `FlutterNativeSplash.preserve`/
+  // `.remove()`) rather than an abrupt cut when the splash is dismissed.
+  bool _visible = false;
+
   @override
   void initState() {
     super.initState();
     LastEmailStore.read().then((email) {
-      if (email != null && mounted) setState(() => _emailController.text = email);
+      if (email != null && mounted)
+        setState(() => _emailController.text = email);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _visible = true);
     });
   }
 
@@ -38,10 +48,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(loginControllerProvider.notifier).signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    await ref
+        .read(loginControllerProvider.notifier)
+        .signIn(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
   }
 
   @override
@@ -59,45 +71,57 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Iniciar sesión')),
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty) ? 'Ingresá tu email' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Contraseña'),
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? 'Ingresá tu contraseña' : null,
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: loginState.isLoading ? null : _submit,
-                    child: loginState.isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Ingresar'),
-                  ),
-                ],
+        child: AnimatedOpacity(
+          opacity: _visible ? 1 : 0,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeIn,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Image.asset('assets/images/splash_logo.png', height: 140),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Ingresá tu email'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña',
+                      ),
+                      obscureText: true,
+                      autofillHints: const [AutofillHints.password],
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Ingresá tu contraseña'
+                          : null,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: loginState.isLoading ? null : _submit,
+                      child: loginState.isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Ingresar'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

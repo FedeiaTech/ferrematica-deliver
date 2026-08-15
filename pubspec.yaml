@@ -50,6 +50,9 @@ dependencies:
   latlong2: ^0.9.1
   shared_preferences: ^2.3.0
   flutter_map_animations: ^0.10.0
+  # Also used at runtime (main.dart's preserve()/remove() calls, not just
+  # the build-time asset generator), so this must be a regular dependency.
+  flutter_native_splash: ^2.4.4
 
 dev_dependencies:
   flutter_test:
@@ -70,7 +73,6 @@ dev_dependencies:
   # top level. Pinned to match flutter_riverpod's transitive riverpod version.
   riverpod: 3.0.0
   flutter_launcher_icons: ^0.14.4
-  flutter_native_splash: ^2.4.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

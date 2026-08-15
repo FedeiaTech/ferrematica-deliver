@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/bootstrap/app_bootstrap.dart';
@@ -11,7 +12,15 @@ import 'core/theme/background_color_provider.dart';
 import 'features/orders/data/providers.dart' show orderSyncServiceProvider;
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  // Keeps the native splash on screen through `AppBootstrap.init()`'s async
+  // work (Isar open, Supabase init) instead of letting the engine dismiss it
+  // at the first drawn frame — which would otherwise flash an empty/loading
+  // frame before bootstrap finishes. Paired with the explicit `.remove()`
+  // below, once the widget tree is actually ready to paint. LoginScreen's
+  // own fade-in (see that file) is what makes the handoff read as a
+  // deliberate crossfade rather than an abrupt cut.
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   final bootstrap = await AppBootstrap.init();
 
   runApp(
@@ -24,6 +33,7 @@ Future<void> main() async {
       child: const FerrematicaApp(),
     ),
   );
+  FlutterNativeSplash.remove();
 }
 
 class FerrematicaApp extends ConsumerWidget {
