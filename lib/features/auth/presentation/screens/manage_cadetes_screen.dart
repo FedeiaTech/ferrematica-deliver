@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -141,9 +144,13 @@ class _CadeteTile extends ConsumerWidget {
 }
 
 /// Edit form (nombre + nro) opened as a modal bottom sheet, matching
-/// `assign_cadete_sheet.dart`'s interaction shape. Editing email/password
-/// is out of scope here — that's account-credential territory, not roster
-/// administration (per the confirmed scope: "en perfil, nro, nombre").
+/// `assign_cadete_sheet.dart`'s interaction shape. Editing email is still
+/// out of scope (would mean recreating the `auth.users` row) — password
+/// reset is offered via a separate "Cambiar contraseña" button that opens
+/// [_ChangePasswordDialog], deliberately its own action rather than a field
+/// in this form: a password reset is a distinct, higher-consequence
+/// operation (invalidates the cadete's current session credential) that
+/// shouldn't be bundled into an accidental save of nombre/nro.
 class _EditCadeteSheet extends ConsumerStatefulWidget {
   const _EditCadeteSheet({required this.cadete});
 
@@ -248,6 +255,16 @@ class _EditCadeteSheetState extends ConsumerState<_EditCadeteSheet> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) =>
+                        _ChangePasswordDialog(cadete: widget.cadete),
+                  ),
+                  icon: const Icon(Icons.password_outlined),
+                  label: const Text('Cambiar contraseña'),
+                ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: saving ? null : _submit,
@@ -264,6 +281,140 @@ class _EditCadeteSheetState extends ConsumerState<_EditCadeteSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Dueño-only password reset, opened from [_EditCadeteSheet]. Mirrors
+/// `create_cadete_screen.dart`'s password field: generate/show/copy, same
+/// 6-character minimum enforced both here and by the Edge Function
+/// server-side (`update-cadete-password/index.ts`).
+class _ChangePasswordDialog extends ConsumerStatefulWidget {
+  const _ChangePasswordDialog({required this.cadete});
+
+  final CadeteProfile cadete;
+
+  @override
+  ConsumerState<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _generatePassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#%';
+    final random = Random.secure();
+    final generated = List.generate(
+      12,
+      (_) => chars[random.nextInt(chars.length)],
+    ).join();
+    setState(() {
+      _passwordController.text = generated;
+      _obscurePassword = false;
+    });
+  }
+
+  Future<void> _copyPassword() async {
+    await Clipboard.setData(ClipboardData(text: _passwordController.text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Contraseña copiada')));
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final controller = ref.read(updateCadetePasswordControllerProvider.notifier);
+    await controller.updatePassword(id: widget.cadete.id, password: _passwordController.text);
+    if (!mounted) return;
+
+    final state = ref.read(updateCadetePasswordControllerProvider);
+    if (state.hasError) {
+      final error = state.error;
+      final message = error is CadeteDirectoryException
+          ? error.message
+          : 'No se pudo cambiar la contraseña.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Contraseña actualizada')));
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final saving = ref.watch(updateCadetePasswordControllerProvider).isLoading;
+
+    return AlertDialog(
+      title: Text('Contraseña de ${widget.cadete.displayName}'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _passwordController,
+          autofocus: true,
+          obscureText: _obscurePassword,
+          decoration: InputDecoration(
+            labelText: 'Nueva contraseña *',
+            border: const OutlineInputBorder(),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  ),
+                  tooltip: _obscurePassword ? 'Mostrar' : 'Ocultar',
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_outlined),
+                  tooltip: 'Copiar contraseña',
+                  onPressed: _passwordController.text.isEmpty ? null : _copyPassword,
+                ),
+              ],
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.length < 6) {
+              return 'Debe tener al menos 6 caracteres';
+            }
+            return null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: _generatePassword,
+          icon: const Icon(Icons.password_outlined),
+          label: const Text('Generar'),
+        ),
+        TextButton(
+          onPressed: saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: saving ? null : _submit,
+          child: saving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Guardar'),
+        ),
+      ],
     );
   }
 }

@@ -140,3 +140,25 @@ setCadeteActiveControllerProvider =
     NotifierProvider<SetCadeteActiveController, AsyncValue<void>>(
       SetCadeteActiveController.new,
     );
+
+/// Owner of the manage-cadetes screen's "cambiar contraseña" action. Same
+/// loading/error shape as the other cadete-admin controllers; no provider
+/// invalidation needed on success since a password reset doesn't change
+/// anything [allCadetesProvider]/[cadeteListProvider] read.
+class UpdateCadetePasswordController extends Notifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  Future<void> updatePassword({required String id, required String password}) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(
+      () => ref.read(cadeteDirectoryProvider).updateCadetePassword(id: id, password: password),
+    );
+  }
+}
+
+final NotifierProvider<UpdateCadetePasswordController, AsyncValue<void>>
+updateCadetePasswordControllerProvider =
+    NotifierProvider<UpdateCadetePasswordController, AsyncValue<void>>(
+      UpdateCadetePasswordController.new,
+    );

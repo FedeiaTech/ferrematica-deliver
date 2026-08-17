@@ -116,6 +116,15 @@ abstract interface class CadeteDirectory {
   /// (the assignment picker) and in `is_cadete()`-gated RLS checks,
   /// while [listAllCadetes] and past `orders` rows still see them fine.
   Future<void> setCadeteActive({required String id, required bool active});
+
+  /// Resets a cadete's login password via the `update-cadete-password` Edge
+  /// Function — same rationale as [createCadete]'s Edge Function: resetting
+  /// another user's auth password requires the `service_role` key, which
+  /// never ships to the app. [password] is handed to the cadete directly by
+  /// the dueño, same as at account creation — there is no reset-email flow.
+  /// Throws [CadeteDirectoryException] on failure (validation, unauthorized
+  /// caller, or the cadete id not being found).
+  Future<void> updateCadetePassword({required String id, required String password});
 }
 
 /// Thrown by any [CadeteDirectory] write ([createCadete], [updateCadete],

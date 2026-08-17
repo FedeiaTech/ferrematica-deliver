@@ -31,12 +31,15 @@ class SupabaseCadeteDirectory implements CadeteDirectory {
     Future<void> Function({required String id, required String nombre, int? nro})?
     cadeteUpdater,
     Future<void> Function({required String id, required bool active})? cadeteActiveSetter,
+    Future<void> Function({required String id, required String password})?
+    cadetePasswordUpdater,
   }) {
     _cadeteFetcher = cadeteFetcher ?? _fetchCadeteRows;
     _allCadeteFetcher = allCadeteFetcher ?? _fetchAllCadeteRows;
     _cadeteCreator = cadeteCreator ?? _invokeCreateCadete;
     _cadeteUpdater = cadeteUpdater ?? _updateCadeteRow;
     _cadeteActiveSetter = cadeteActiveSetter ?? _updateCadeteActive;
+    _cadetePasswordUpdater = cadetePasswordUpdater ?? _invokeUpdateCadetePassword;
   }
 
   final SupabaseClient _client;
@@ -53,6 +56,8 @@ class SupabaseCadeteDirectory implements CadeteDirectory {
   _cadeteUpdater;
   late final Future<void> Function({required String id, required bool active})
   _cadeteActiveSetter;
+  late final Future<void> Function({required String id, required String password})
+  _cadetePasswordUpdater;
 
   @override
   Future<List<CadeteProfile>> listCadetes() async {
@@ -121,6 +126,11 @@ class SupabaseCadeteDirectory implements CadeteDirectory {
   @override
   Future<void> setCadeteActive({required String id, required bool active}) async {
     await _cadeteActiveSetter(id: id, active: active);
+  }
+
+  @override
+  Future<void> updateCadetePassword({required String id, required String password}) async {
+    await _cadetePasswordUpdater(id: id, password: password);
   }
 
   /// Calls the `create-cadete` Edge Function. `supabase.functions.invoke`
@@ -197,6 +207,22 @@ class SupabaseCadeteDirectory implements CadeteDirectory {
   String _messageFromPostgrestException(PostgrestException error) {
     if (error.code == '23505') return 'Ya hay un cadete activo con ese número.';
     return error.message;
+  }
+
+  /// Calls the `update-cadete-password` Edge Function — same
+  /// `functions.invoke` JWT-forwarding mechanism as [_invokeCreateCadete].
+  Future<void> _invokeUpdateCadetePassword({
+    required String id,
+    required String password,
+  }) async {
+    try {
+      await _client.functions.invoke(
+        'update-cadete-password',
+        body: {'cadeteId': id, 'password': password},
+      );
+    } on FunctionException catch (error) {
+      throw CadeteDirectoryException(_messageFromFunctionException(error));
+    }
   }
 
   /// Prefers the Edge Function's own `{"error": "..."}` body (set for every
