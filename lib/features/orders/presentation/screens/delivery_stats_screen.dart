@@ -297,8 +297,12 @@ class _StatsBody extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _PeriodSelector(period: period, anchor: anchor),
+        const SizedBox(height: 20),
+        Text('Control de cadetes', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        const Divider(height: 1),
         const SizedBox(height: 12),
-        _CadeteFilterDropdown(cadetesAsync: cadetesAsync, selected: cadeteFilter),
+        _CadeteSearchFilter(cadetesAsync: cadetesAsync, selected: cadeteFilter),
         const SizedBox(height: 16),
         if (sortedIds.isEmpty)
           const Padding(
@@ -472,50 +476,113 @@ class _PeriodSelector extends ConsumerWidget {
   }
 }
 
-/// Dueño-only "filtrar por cadete" dropdown, admin-gated the same way
+/// Dueño-only "filtrar por cadete" control, admin-gated the same way
 /// `ManageCadetesScreen` is (this whole `_StatsBody` branch only renders
-/// when `isDueno`). Options are labeled via [CadeteProfile.displayLabel]
-/// ("#03 - Carlos"), sourced from [cadetesAsync] (`allCadetesProvider` —
+/// when `isDueno`). Sourced from [cadetesAsync] (`allCadetesProvider` —
 /// active and inactive, so a since-deactivated cadete's history stays
-/// reachable). A leading "Todos los cadetes" entry (`value: null`) clears
-/// the filter back to the screen's original all-assignees view.
-class _CadeteFilterDropdown extends ConsumerWidget {
-  const _CadeteFilterDropdown({required this.cadetesAsync, required this.selected});
+/// reachable).
+///
+/// Two mutually exclusive states, matching a search-then-pin interaction
+/// (replacing the previous plain dropdown, which forced scrolling a long
+/// list to find one name):
+/// - [selected] is `null` ("todos"): shows a live-filtering [Autocomplete]
+///   text field — matches [CadeteProfile.displayName] case-insensitively
+///   OR [CadeteProfile.nro] as it types, so both "car" and "3" find
+///   "#03 - Carlos". Deliberately shows NO suggestions for an empty query
+///   (spec: don't dump every cadete's card back onto the screen by
+///   default) — the dueño has to type at least one character before
+///   anything appears.
+/// - [selected] is non-null: shows a single dismissible chip naming the
+///   pinned cadete instead of the search field — tapping the chip's ✕
+///   clears [_statsCadeteFilterProvider] back to "todos" and restores the
+///   search field.
+class _CadeteSearchFilter extends ConsumerStatefulWidget {
+  const _CadeteSearchFilter({required this.cadetesAsync, required this.selected});
 
   final AsyncValue<List<CadeteProfile>> cadetesAsync;
   final String? selected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return cadetesAsync.maybeWhen(
+  ConsumerState<_CadeteSearchFilter> createState() => _CadeteSearchFilterState();
+}
+
+class _CadeteSearchFilterState extends ConsumerState<_CadeteSearchFilter> {
+  @override
+  Widget build(BuildContext context) {
+    return widget.cadetesAsync.maybeWhen(
       data: (cadetes) {
         if (cadetes.isEmpty) return const SizedBox.shrink();
-        // Semi-transparent white fill, matching the period chips/anchor
-        // label above so this control reads consistently against a
-        // custom `BrandBackground`.
+
+        if (widget.selected != null) {
+          CadeteProfile? pinned;
+          for (final cadete in cadetes) {
+            if (cadete.id == widget.selected) {
+              pinned = cadete;
+              break;
+            }
+          }
+          // Falls back to showing the search field again if the pinned id
+          // vanished from the roster (shouldn't normally happen — ids are
+          // never reused — but avoids stranding the dueño on a dead chip).
+          if (pinned == null) {
+            return _buildSearchField(cadetes);
+          }
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: InputChip(
+              avatar: const Icon(Icons.person_search_outlined, size: 18),
+              label: Text(pinned.displayLabel),
+              backgroundColor: Colors.white.withValues(alpha: 0.5),
+              onDeleted: () => ref.read(_statsCadeteFilterProvider.notifier).state = null,
+            ),
+          );
+        }
+
+        return _buildSearchField(cadetes);
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildSearchField(List<CadeteProfile> cadetes) {
+    return Autocomplete<CadeteProfile>(
+      displayStringForOption: (option) => option.displayLabel,
+      // Empty query → no suggestions, by design (see class doc) — a
+      // non-empty query matches anywhere in the display name OR the
+      // cadete's assigned `nro` (as plain digits, e.g. "3" matches "#03"),
+      // not just a leading substring, so "los" still finds "Carlos" and
+      // "3" still finds "#03 - Carlos".
+      optionsBuilder: (textEditingValue) {
+        final query = textEditingValue.text.trim().toLowerCase();
+        if (query.isEmpty) return const Iterable<CadeteProfile>.empty();
+        return cadetes.where(
+          (cadete) =>
+              cadete.displayName.toLowerCase().contains(query) ||
+              (cadete.nro?.toString().contains(query) ?? false),
+        );
+      },
+      onSelected: (option) => ref.read(_statsCadeteFilterProvider.notifier).state = option.id,
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
+            // Semi-transparent white fill, matching the period chips/
+            // anchor label above so this control reads consistently
+            // against a custom `BrandBackground`.
             color: Colors.white.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              isExpanded: true,
-              value: selected,
-              icon: const Icon(Icons.filter_list),
-              hint: const Text('Filtrar por cadete'),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Todos los cadetes')),
-                for (final cadete in cadetes)
-                  DropdownMenuItem<String?>(value: cadete.id, child: Text(cadete.displayLabel)),
-              ],
-              onChanged: (value) => ref.read(_statsCadeteFilterProvider.notifier).state = value,
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(borderSide: BorderSide.none),
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Buscar cadete por nombre…',
+              contentPadding: EdgeInsets.symmetric(vertical: 12),
             ),
           ),
         );
       },
-      orElse: () => const SizedBox.shrink(),
     );
   }
 }
