@@ -202,7 +202,17 @@ class _OrderDetailBody extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      // Extra bottom padding beyond the system gesture-nav inset (not just
+      // `MediaQuery.padding.bottom` alone) — on some Android devices (e.g.
+      // Moto G15) the 3-button/gesture nav bar sits close enough to the
+      // last action button (often "Indicar problema"/"Eliminar") that a
+      // bare inset still lets it overlap the tap target.
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.of(context).padding.bottom + 48,
+      ),
       children: [
         const SizedBox(height: 12),
         Text(
